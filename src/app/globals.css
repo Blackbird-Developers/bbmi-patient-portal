@@ -1,0 +1,154 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------
+   Beyond BMI design tokens — mirrored from the marketing site's
+   beyondbmi-wordpress/site/css/tokens.css so the portal reads as the
+   same brand. Poppins is brand-mandated. Navy = ink, clinical blue =
+   primary accent, lime = secondary accent only (pills, dots, ticks).
+------------------------------------------------------------------- */
+@theme {
+  /* brand: clinical blue */
+  --color-blue: #65a1bc;
+  --color-blue-deep: #3f7e99;
+  --color-blue-text: #225a75;
+  --color-blue-soft: #e6eff4;
+  --color-blue-wash: #f5f9fb;
+
+  /* brand: deep navy (ink + dark surfaces) */
+  --color-ink: #053f5c;
+  --color-ink-deep: #032e45;
+  --color-ink-soft: #2b5165;
+  --color-muted: #5c6f77;
+  --color-dark-card: #0a4d70;
+  --color-dark-text: #f2f4f4;
+  --color-dark-muted: #94b1bf;
+
+  /* lime — secondary accent only */
+  --color-lime: #a5db73;
+  --color-lime-deep: #6faf42;
+  --color-lime-text: #266314;
+  --color-lime-soft: #dcefcc;
+
+  /* surfaces */
+  --color-paper: #ffffff;
+  --color-paper-soft: #f5f9fb;
+  --color-paper-warm: #f7f3ed;
+  --color-divider: #e2e8e5;
+  --color-divider-soft: #f0f2f4;
+
+  /* functional */
+  --color-positive: #2f7a4d;
+  --color-positive-soft: #e3f1e8;
+  --color-warn: #b34433;
+  --color-warn-soft: #f9e5e1;
+  --color-amber: #b26a00;
+  --color-amber-soft: #fbe3ce;
+  --color-trustpilot: #00b67a;
+
+  /* typography */
+  --font-sans: var(--font-poppins), "Poppins", system-ui, -apple-system, sans-serif;
+  --font-display: var(--font-poppins), "Poppins", system-ui, sans-serif;
+
+  /* radii — slightly larger for a premium feel */
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+
+  /* shadows (navy-tinted, never grey) */
+  --shadow-card: 0 1px 2px rgba(5, 63, 92, 0.04), 0 8px 24px rgba(5, 63, 92, 0.06);
+  --shadow-lift: 0 2px 6px rgba(5, 63, 92, 0.08), 0 18px 40px rgba(5, 63, 92, 0.12);
+  --shadow-deep: 0 24px 60px rgba(5, 63, 92, 0.18);
+
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--color-paper-soft);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+  color: var(--color-ink);
+}
+
+::selection {
+  background: var(--color-lime-soft);
+  color: var(--color-ink);
+}
+
+/* focus ring — always visible, brand blue */
+:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--color-blue) 55%, transparent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* utilities that Tailwind doesn't ship */
+@utility card {
+  background: var(--color-paper);
+  border: 1px solid var(--color-divider-soft);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+
+@utility eyebrow {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-blue-text);
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-up {
+  animation: fade-up 0.45s var(--ease-out-soft) both;
+}

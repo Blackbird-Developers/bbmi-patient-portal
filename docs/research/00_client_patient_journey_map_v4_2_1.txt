@@ -1,0 +1,1696 @@
+ 
+ BBMI — Patient Journey Map v4 
+ BBMI · Patient Journey Map
+ ① Website → €89 
+ ② €89 → 90-Day 
+ ③ 90-Day Programme 
+ ④ Ongoing Care 
+ ⑤ KPIs & Metrics 
+ ⑥ To Implement 
+Stripe
+Semble
+HubSpot
+Aircall
+Web App
+ ↑
+ Navigation 
+ ◀ 
+ ① Website → €89 
+ › 
+ Overview 
+ Three CTA pathways 
+ Post-payment flow 
+ €89 — what patient gets 
+ Feedback touchpoints 
+ Deviation pathways 
+ 12 
+ ② €89 → 90-Day 
+ › 
+ Overview 
+ Patient timeline 
+ Day 21 outcomes 
+ Deviation pathways 
+ 9 
+ ③ 90-Day Programme 
+ › 
+ Overview 
+ MDT schedule 
+ Day 80 retention call 
+ Phase 3 system owners 
+ Deviation pathways 
+ 12 
+ ④ Ongoing Care 
+ › 
+ Overview 
+ Enrolment pathway 
+ What the patient gets 
+ Add-on expert support 
+ Systems & owners 
+ Deviation pathways 
+ 10 
+ ⑤ KPIs & Metrics 
+ › 
+ Funnel overview 
+ Traffic & awareness 
+ Sales conversion 
+ Day 5–7 follow-up 
+ Day 21 commitment 
+ Clinical engagement 
+ Retention & revenue 
+ Subscriber health 
+ Team capacity 
+ Reporting cadence 
+ → 90-Day to Ongoing Care 
+ ⑥ To Implement 
+ › 
+ Art — Tech (9 items) 
+ 9 
+ Alejandro — Commercial (3 items) 
+ 3 
+ Scheduling rules 
+ Quick links 
+ › 
+ All deviations — Tab 1 
+ All deviations — Tab 2 
+ All deviations — Tab 3 
+ Day 80 retention call 
+ Subscriber health KPIs 
+ Team capacity KPIs 
+ Journey 1 of 3
+ Website → €89 Consultation
+ Every patient enters through one of three CTA pathways on beyondbmi.ie. All three paths converge at the same endpoint: the €89 specialist consultation.
+ Ownership key — 
+ Doctor 
+ Nurse 
+ Care Coordinator 
+ Tech — Art 
+ Commercial — Alejandro 
+ CS Team — Monika / Rahela 
+ Dietitian 
+ Health Coach 
+ 🤖 Automated 
+ 🔧 To Implement 
+ ℹ 
+ Priority rule: CTA 1 (Pay Direct) must always dominate in visual weight. CTAs 2 and 3 are fallback pathways only. All three paths converge at the same €89 specialist consultation. 
+ Entry pathways — three CTAs
+ CTA 1 — Primary
+ Book & Pay €89 Direct
+ Developer / Tech 
+ Click "Book Assessment" hero CTA
+ BMI calculator + T&Cs accepted
+ Select doctor slot Semble 
+ €89 payment via Stripe Stripe 
+ Confirmation email & SMS HubSpot 
+ Reminders 24hr & 1hr HubSpot 
+ Account creation prompt Web App 
+ "What Happens Next" email + 5 Qs HubSpot 
+ CTA 2 — Sticky Tab
+ Phone Sales Direct
+ Care Coordinator 
+ Click sticky "Call Us" tab on any page
+ Aircall routes to care coordinator Aircall 
+ Sales playbook: qualification + needs
+ €89 via Stripe payment link Stripe 
+ If no agent: voicemail → 2hr callback task HubSpot 
+ Post-payment: same flow as CTA 1 steps 5–8
+ All calls logged to HubSpot HubSpot 
+ CTA 3 — Fallback
+ Book a Sales Call
+ Care Coordinator 
+ Click "Book a Call" button
+ Select slot via HubSpot Meetings HubSpot 
+ Confirmation email & SMS fired HubSpot 
+ Reminders 24hr & 1hr before call
+ Agent calls via Aircall at booked time Aircall 
+ Sales playbook: qualification + objections
+ €89 via Stripe payment link Stripe 
+ Post-payment: same flow as CTA 1 steps 5–8
+ Shared post-payment flow — all CTAs
+ Stripe
+ Payment
+ TRIGGER
+ €89 payment processed
+ One-off charge. Receipt auto-issued.
+ Stripe 
+ →
+ WEBHOOK
+ Payment success fires to HubSpot
+ Contact created. Status = Consultation Booked.
+ HubSpot Commercial 
+ Semble
+ Clinical booking
+ BOOKING
+ Doctor slot confirmed
+ Slot locked. Patient EHR record created.
+ Semble Developer / Tech 
+ →
+ PRE-CONSULT
+ 5 screening Qs stored
+ Attached to patient record before consultation.
+ Semble Doctor 
+ HubSpot
+ Comms & CRM
+ EMAIL + SMS
+ Confirmation sent
+ Payment receipt + appointment details.
+ HubSpot Commercial 
+ →
+ REMINDERS
+ 24hr & 1hr alerts
+ Automated email + SMS before consultation.
+ HubSpot Commercial 
+ →
+ EDUCATION
+ "What Happens Next" email
+ Video, pathway explanation, consultation expectations, 5 screening Qs.
+ HubSpot Commercial 
+ →
+ TASK AUTO-CREATED
+ Day 5–7 follow-up task
+ Assigned to Nurse. Fires post-consultation completion.
+ HubSpot Nurse 
+ BBMI Web App
+ Patient account
+ ACCOUNT
+ Account creation prompted
+ Post-payment. Patient sets up BBMI account.
+ Web App Developer / Tech 
+ →
+ CONFIRMED
+ Account confirmation sent
+ HubSpot fires confirmation email.
+ HubSpot Commercial 
+ Consultation
+ Endpoint
+ DAY 0
+ €89 Specialist Consultation
+ 30-min obesity medicine consultation via Semble video/phone.
+ Semble Doctor 
+ 🟢 Exit Protocol — applies at any point in this journey
+ At any point a patient indicates they want to leave, pause or stop treatment — no exit is processed without a clinical sign-off call . Nurse calls within 5 days, Doctor reviews if medication is being stopped, Health Coordinator presents alternatives. Full protocol is detailed in the Deviation Pathways section below. No exceptions. 
+ Deviation pathways — all possible breakdowns 
+ 9 scenarios 
+ › 
+ ⚠ BMI calculator disqualifies patient
+ Developer / Tech 
+ BMI falls outside eligibility criteria at booking step
+ Patient shown clear ineligibility message on screen
+ Signposted to GP or alternative support options
+ HubSpot lead created — tagged as Ineligible / BMI
+ Nurture sequence triggered — re-engage if BMI changes
+ No payment attempted — slot not consumed
+ ⚠ T&Cs not accepted — drop-off
+ Commercial 
+ Patient exits booking flow at T&Cs gate without accepting
+ HubSpot abandoned flow event captured via website tracking
+ Automated follow-up email sent within 1hr — "Did something stop you?"
+ CTA 2 sticky tab remains visible — option to call instead
+ Re-engagement email at Day 7 if no return
+ ⚠ Slot selected but payment abandoned
+ Operations / Tech 
+ Patient selects doctor slot but exits before completing Stripe payment
+ Slot held for 15 minutes — auto-released on timeout
+ HubSpot abandoned checkout event fires
+ Automated email within 30 mins — "Your slot is waiting"
+ Care Coordinator follow-up call triggered if email unopened after 24hrs
+ Slot released back into Semble availability pool
+ ⚠ Payment failure at checkout
+ Operations / Tech 
+ Stripe payment failed webhook fires immediately
+ HubSpot retry email + SMS sent within 5 minutes
+ Patient prompted to try alternative card or payment method
+ Slot held for 24hrs pending successful retry
+ Ops follow-up task created if unresolved after 48hrs
+ Slot released if payment unresolved after 48hrs
+ ⚠ Account creation not completed post-payment
+ Operations / Tech 
+ Patient pays €89 but never completes BBMI account setup
+ HubSpot detects account not created within 24hrs of payment
+ Automated reminder email sent — "Complete your account set-up"
+ Second reminder at 48hrs if still incomplete
+ Ops task created at 72hrs — manual outreach to complete setup
+ Pre-consultation education emails held until account confirmed
+ ⚠ Screening questions not submitted pre-consultation
+ Operations / Tech 
+ HubSpot detects screening Qs not completed 24hrs before appointment
+ Automated reminder email + SMS sent immediately
+ Second reminder 4hrs before appointment
+ If still not completed — Doctor notified before consultation begins
+ Doctor proceeds but documents incomplete pre-screening in Semble notes
+ Screening Qs completed during or immediately after consultation
+ ⚠ CTA 2 voicemail — no callback response
+ Care Coordinator 
+ Patient leaves voicemail but doesn't answer callback attempt
+ Aircall logs missed callback — HubSpot task created
+ Care Coordinator attempts callback at 2hr and 24hr intervals
+ HubSpot automated SMS sent after first missed callback
+ After 3 failed attempts — switched to CTA 3 flow: patient offered scheduled slot
+ If no response after 7 days — added to nurture sequence
+ ⚠ CTA 3 sales call — patient no-show
+ Care Coordinator 
+ Patient booked a callback slot but not available when agent calls
+ Aircall call logged as no answer — HubSpot task updated
+ Automated SMS sent immediately — "We tried to reach you"
+ Care Coordinator re-attempts within 2hrs
+ HubSpot offers patient option to self-rebook via Meetings widget
+ After 3 failed attempts — moved to email nurture sequence
+ ⚠ Consultation no-show
+ Operations / Tech 
+ Semble flags missed appointment — Doctor slot freed
+ HubSpot no-show workflow triggered immediately
+ Automated re-booking email + SMS sent within 30 minutes
+ Nurse follow-up call within 4hrs to understand reason
+ One free reschedule offered — second no-show requires re-payment
+ Marked as lost after 3 contact attempts with no response
+ ⚠ Patient clinically ineligible at consultation
+ Doctor 
+ Doctor determines patient is not suitable for GLP-1 medication
+ Doctor documents clinical rationale fully in Semble EHR
+ Patient counselled on alternative treatment pathways
+ Refund policy reviewed — full €89 refund issued via Stripe
+ HubSpot status updated: Ineligible — Clinical
+ Patient referred to GP with clinical summary letter if appropriate
+ No further commercial follow-up — clinical decision is final
+ ⚠ Technical failure during booking flow
+ Developer / Tech 
+ Semble widget or Stripe checkout fails mid-flow
+ Patient shown clear error message with direct phone number (CTA 2)
+ Error logged automatically in dev monitoring
+ Dev team alerted within 15 minutes of failure
+ HubSpot captures partial lead data if email already entered
+ Follow-up email sent if email captured — apology + direct booking link
+ ✕ Non-conversion — visitor leaves without any CTA
+ Commercial 
+ Visitor exits site without clicking any CTA
+ Exit-intent popup triggered if available — soft CTA
+ If email captured via any touchpoint — nurture sequence activated
+ HubSpot email series over 30 days — education led, not sales led
+ Re-engagement CTA offered at Day 7 and Day 30
+ Lead remains in CRM — never deleted
+ 🟢 Exit Protocol — Clinical Sign-Off & Safe Exit
+ Doctor Nurse Health Coordinator 
+ Applies to ALL exit requests at any stage. No patient is ever cancelled without this process completed.
+ Step 1 — Pause and acknowledge: Nurse contacts patient within 5 days of any exit intent. Listen first — no pressure, no sales, no judgement.
+ Step 2 — Understand the reason: Nurse asks open questions to identify root cause — clinical concern, cost, personal circumstances, dissatisfaction, or achieved goal.
+ Step 3 — Clinical safety check: Nurse confirms patient is medically safe to pause or stop medication. If on a higher dose — tapering plan discussed. Doctor review required before any abrupt stop.
+ Step 4 — Doctor sign-off: Any patient stopping GLP-1 medication must have formal Doctor review. Tapering or cessation plan documented in Semble EHR. Doctor co-signs the exit.
+ Step 5 — Alternative solution offered: Health Coordinator presents the most appropriate alternative — pause, downgrade, standalone prescription, return at any time.
+ Step 6 — Decision recorded: Full outcome logged in HubSpot (reason + outcome: Retained / Paused / Downgraded / Exited) and Semble clinical notes updated same day.
+ Step 7 — Re-engagement pathway: HubSpot sequence activated for all non-retained outcomes. Patient never deleted from CRM. Open door communicated clearly.
+ Journey 2 of 3
+ €89 Consultation → 90-Day Programme
+ Convert every €89 consultation patient into the 90-Day Programme within 21 days. Three key touchpoints: the consultation, a Day 5–7 nurse follow-up, and a Day 21 sales commitment call.
+ Ownership key — 
+ Doctor 
+ Nurse 
+ Care Coordinator 
+ Commercial 
+ Operations / Tech 
+ 💳 
+ Two pathways into the 90-Day Programme — mirroring the €89 CTA structure. CTA A is the primary self-serve route via the BBMI web app. CTA B is the Care Coordinator-led route over the phone. Both paths converge at the same 90-Day MDT schedule. 
+ Entry pathways — two options to join the 90-Day Programme
+ CTA A — Primary
+ Pay for 90-Day Direct via Web App
+ 🤖 Automated Web App 
+ Patient hits CTA button in the BBMI web app: "Start your 90-Day Programme"
+ Presented with two payment options:
+ Option A: €399 upfront (save €51) Stripe 
+ Option B: €150/month × 3 (€450 total) Stripe 
+ Payment confirmed — welcome email (90-Day) auto-sent HubSpot 
+ Patient books all MDT appointments via Semble widget Semble 
+Doctor (M1+M3) · Dietitian (M1+M3) · Health Coach (M1+M2+M3) · Nurse (M2)
+ Spacing rules enforced: ±7 days of each monthly target
+ 24hr & 1hr reminders auto-sent for each appointment Semble 
+ Day 80 nurse retention task auto-created HubSpot 
+ CTA B — Care Coordinator
+ 90-Day via Care Coordinator (Phone)
+ Care Coordinator Aircall 
+ Care Coordinator presents payment options on Day 21 call
+ Patient chooses Option A (€399 upfront) or Option B (€150/month × 3)
+ Care Coordinator sends Stripe link during call Stripe 
+ Care Coordinator books ALL MDT appointments on patient's behalf Semble 
+Doctor (M1+M3) · Dietitian (M1+M3) · Health Coach (M1+M2+M3) · Nurse (M2)
+ Spacing rules apply: ±7 days of each monthly target
+ Patient receives automated confirmations + reminders Semble HubSpot 
+ Welcome email (90-Day) auto-sent on payment HubSpot 
+ Day 80 nurse retention task auto-created HubSpot 
+ Patient timeline — Day 0 to Day 21+
+ Day 0
+ €89 Specialist Consultation
+ Doctor 
+ History, BMI & comorbidities reviewed
+ Treatment plan & prescription issued
+ GLP-1 dosing & titration explained
+ MDT model introduced
+ Post-consult summary emailed
+ Day 5–7 nurse call scheduled
+ Day 0 (post-consult)
+ Prescription & Medication Provision
+ Doctor 🤖 Automated 
+ Doctor issues script in Semble (if clinically appropriate)
+ Automated email to patient: choose delivery method
+ Option A: medication delivered to door — patient provides address
+ Option B: script sent to pharmacy of patient's choice
+ Automated confirmation sent: "your script has been dispatched"
+ Patient CTA: ✅ received OK / ❌ issue — CS task auto-created (Monika) if issue
+ Day 1–4
+ Post-Consult Comms
+ Commercial 
+ Welcome email (€89 programme) auto-sent — FAQs, side effects, what to expect
+ Web App activated & weight logging starts
+ Medication confirmed arrived via patient feedback CTA
+ Day 5–7 nurse task auto-created in HubSpot (from consultation date)
+ Day 21 care coordinator task auto-created in HubSpot (from consultation date)
+ Day 5–7 ★ Key touchpoint
+ Nurse Follow-Up Call
+ Nurse 
+ Medication received & being taken
+ Injection technique confirmed
+ Side effects checked & normalised
+ Post-consultation Qs answered
+ Web app logging checked
+ 90-Day Programme softly introduced
+ Day 8–20
+ Nurture Period
+ Commercial 
+ Patient settles into medication
+ Web app logging continues
+ Educational content sequence
+ Day 21 sales task queued in HubSpot
+ Day 21 ★ Commit moment
+ Commitment Call
+ Care Coordinator 
+ Wellbeing & medication check-in
+ Titration journey explained
+ 90-Day Programme presented
+ Value vs. going it alone addressed
+ Commitment sought
+ Day 21+ — Outcome
+ Decision Point
+ Care Coordinator 
+ YES → €450 upfront or €150/month × 3 (€450 total) or €399 upfront → onboarding
+ UNDECIDED → follow-up scheduled
+ DECLINED → nurture workflow
+ 💬 Feedback Touchpoints — this stage
+ Day 5–7 Nurse call — end of call — Nurse asks 3 questions verbally and logs in HubSpot: (1) How would you rate your experience so far 1–10? (2) Do you feel supported? (3) Is there anything we could have done better? Nurse logs sentiment: Positive / Neutral / Concern.
+ Day 8 automated email — HubSpot sends: How are you getting on with the medication after your first week? 3-option survey: Great / Okay / Struggling. Routes to different follow-up sequences based on response.
+ Day 21 Health Coordinator call — opening — Before presenting the 90-Day Programme, ask: Looking back at the last 3 weeks — what has been the best part? What has been the hardest? Surfaces objections early and personalises the pitch.
+ Post-Day 21 email (regardless of outcome) — 2-minute survey via HubSpot form. Captures both converters and non-converters for programme improvement.
+ Day 21 commitment call — outcomes by system
+ YES
+ Patient commits
+ PAYMENT
+ Payment — two options
+ Option A — Pay monthly: €450 total. €150 charged automatically in Month 1, Month 2 and Month 3 via Stripe.
+ Option B — Pay upfront: €450 today. Saves €49. One payment. Patient selects during call — Health Coordinator sends correct Stripe link.
+ Stripe Care Coordinator 
+ →
+ ONBOARDING
+ MDT appointments booked
+ Payment confirmed (€450 upfront or first €150 instalment). All MDT Month 1 appointments scheduled in Semble.
+ Semble Nurse 
+ →
+ CRM UPDATE
+ Status → "90-Day Active"
+ Welcome sequence fired. Day 80 retention task auto-created.
+ HubSpot Commercial 
+ →
+ WEB APP ACCESS
+ Full access granted
+ Community, content library, insurance docs activated.
+ Web App Developer / Tech 
+ UNDECIDED
+ Needs more time
+ TASK
+ Follow-up call scheduled
+ HubSpot task for 7-day follow-up. Care Coordinator assigned.
+ HubSpot Care Coordinator 
+ →
+ NURTURE
+ Consideration email sequence
+ Benefits, testimonials, titration timeline.
+ HubSpot Commercial 
+ →
+ RETRY
+ Second attempt at Day 28
+ Max 3 attempts before marking as non-conversion.
+ Care Coordinator 
+ DECLINED
+ Not converting
+ CRM
+ Non-conversion workflow triggered
+ Lifecycle stage updated. Remains in CRM for re-engagement.
+ HubSpot Operations / Tech 
+ →
+ PRESCRIPTION
+ Standalone prescription offered
+ Doctor can maintain GLP-1 prescription as a standalone service. Patient keeps medication without committing to the full 90-Day Programme.
+ Semble Doctor 
+ →
+ LONG-TERM NURTURE
+ 30-day re-engagement series
+ Education and results content via HubSpot. Open door to join the 90-Day Programme at any time. No pressure follow-up at Day 30 and Day 60.
+ HubSpot Commercial 
+ 💬 Feedback Touchpoints — this stage
+ Post-booking confirmation email — 1-question pulse: How easy was it to book today? (1–5 rating). HubSpot captures response.
+ Pre-consultation reminder (24hr) — Ask: Is there anything you want to cover with the doctor tomorrow? Captures anxiety and intent. Logged as HubSpot note.
+ Post-consultation same-day email — 3-question survey: (1) How did you find your consultation? (2) Did you feel heard? (3) How confident do you feel about your next steps? HubSpot form.
+ Pure Pharmacy delivery confirmation — Text or email: How was the delivery experience? 1–5 star rating. Logged to HubSpot.
+ €89 Consultation — what the patient gets
+ Service element | 
+ Month 1 (Days 1–30) | 
+ Owner | 
+ System | 
+ Patient-facing notes | 
+ | 
+ Specialist consultation | 
+ ✓ Video (30 min) | 
+ Doctor | 
+ Semble | 
+ Full obesity medicine assessment. Treatment plan, prescription and GLP-1 dosing explained. Day 0. | 
+ Nurse follow-up call | 
+ ✓ Video (10 min) — Day 5–7 | 
+ Nurse | 
+ Semble | 
+ Medication check-in, side effects reviewed, injection technique confirmed, web app set-up checked. | 
+ Health Coordinator call | 
+ ✓ Phone (10 min) — Day 21 | 
+ Health Coordinator | 
+ Aircall | 
+ Welfare check-in. Introduction to 90-Day Programme. If interested: €450 upfront (save €49) or €450 over 3 months (€150/mo). Health Coordinator sends correct Stripe link on commitment. | 
+ Async nurse support | 
+ ✓ Throughout Month 1 | 
+ Nurse | 
+ Semble | 
+ Clinical queries and side effect support available throughout. Response within 4 business hours. | 
+ Prescription management | 
+ ✓ | 
+ Doctor | 
+ Semble | 
+ GLP-1 prescription issued at consultation. Managed and renewed by doctor as required. | 
+ Medication home delivery | 
+ ✓ Pure Pharmacy | 
+ Operations / Tech | 
+ Semble | 
+ Medication dispatched directly to patient's door via Pure Pharmacy. No pharmacy visit required. | 
+ Insurance documentation | 
+ ✓ | 
+ Nurse | 
+ Semble | 
+ Documentation issued for private health insurance reclaim. Issued post-consultation. | 
+ HubSpot comms & sequences | 
+ ✓ Throughout Month 1 | 
+ Commercial | 
+ HubSpot | 
+ Booking confirmation, appointment reminders (24hr & 1hr), "What Happens Next" education email, Day 5–7 task, Day 21 task. | 
+ 🟢 Exit Protocol — applies at any point in this journey
+ At any point a patient indicates they want to leave, pause or stop treatment — no exit is processed without a clinical sign-off call . Nurse calls within 5 days, Doctor reviews if medication is being stopped, Health Coordinator presents alternatives. Full protocol is detailed in the Deviation Pathways section below. No exceptions. 
+ Deviation pathways — all possible breakdowns 
+ 12 scenarios 
+ › 
+ ⚠ Day 5–7 call not completed
+ Operations / Tech 
+ HubSpot task overdue alert fires to ops
+ Nurse re-attempts call within 24hrs
+ If 3 failed attempts — email sent instead with key medication info
+ Task remains open until contact is made
+ ⚠ Patient not taking medication
+ Nurse 
+ Flagged by Nurse on Day 5–7 call
+ Nurse logs concern in Semble clinical notes
+ Nurse provides education on administration and side effects
+ Doctor notified if clinical concern — escalation pathway triggered
+ HubSpot task created for Day 14 follow-up check-in
+ ⚠ Significant side effects reported
+ Doctor 
+ Nurse flags on Day 5–7 call — logged in Semble
+ Doctor notified same day for clinical review
+ Doctor may adjust dose, pause titration or schedule urgent review
+ HubSpot deviation task created — type: Clinical Escalation
+ 90-Day conversion timeline paused until patient stabilised
+ ⚠ Medication not received by Day 7
+ Nurse 
+ Nurse flags on Day 5–7 call
+ Nurse contacts pharmacy to investigate dispatch
+ Doctor re-issues prescription if required via Semble
+ HubSpot task: medication delivery follow-up
+ Day 21 commitment call timing adjusted if medication significantly delayed
+ ⚠ Day 21 call not answered
+ Care Coordinator 
+ Care Coordinator re-attempts at 24hr and 48hr intervals
+ HubSpot automated SMS sent after first missed attempt
+ Max 3 call attempts before switching to email-only nurture
+ HubSpot task remains open — flagged to ops after 72hrs with no contact
+ ⚠ 90-Day payment fails
+ Operations / Tech 
+ Stripe payment failure webhook fires to HubSpot
+ HubSpot automated retry email + SMS sent immediately
+ Care Coordinator follows up by phone within 24hrs
+ Alternative payment option offered: €399 upfront or €150/month × 3
+ MDT onboarding held until payment confirmed
+ Marked as lost if unresolved after 5 days
+ ⚠ Instalment payment missed (Month 2 or 3)
+ Operations / Tech 
+ Stripe failed charge webhook fires
+ HubSpot automated payment retry email sent Day 1
+ Ops follows up by phone on Day 3
+ Clinical access maintained for 7 days pending resolution
+ If unresolved after 7 days — access paused and clinical team notified
+ ⚠ Patient withdraws from 90-Day mid-programme
+ Nurse 
+ Nurse conducts exit call to understand reason
+ Refund policy reviewed — partial refund if within first 30 days
+ Remaining instalment payments cancelled in Stripe
+ HubSpot status updated to Withdrawn — type logged (cost / clinical / personal)
+ Re-engagement sequence triggered at 60 days
+ Prescription management offered as standalone if medication ongoing
+ ✕ Patient completely unreachable post-consultation
+ Commercial 
+ 3 call attempts + 3 emails with no response
+ HubSpot status updated to Unresponsive
+ Long-term email nurture sequence activated (60-day drip)
+ Re-engagement CTA offered at Day 30 and Day 90
+ Contact remains in CRM — never deleted
+ 🟢 Exit Protocol — Clinical Sign-Off & Safe Exit
+ Doctor Nurse Health Coordinator 
+ Applies to ALL exit requests at any stage. No patient is ever cancelled without this process completed.
+ Step 1 — Pause and acknowledge: Nurse contacts patient within 5 days of any exit intent. Listen first — no pressure, no sales, no judgement.
+ Step 2 — Understand the reason: Nurse asks open questions to identify root cause — clinical concern, cost, personal circumstances, dissatisfaction, or achieved goal.
+ Step 3 — Clinical safety check: Nurse confirms patient is medically safe to pause or stop medication. If on a higher dose — tapering plan discussed. Doctor review required before any abrupt stop.
+ Step 4 — Doctor sign-off: Any patient stopping GLP-1 medication must have formal Doctor review. Tapering or cessation plan documented in Semble EHR. Doctor co-signs the exit.
+ Step 5 — Alternative solution offered: Health Coordinator presents the most appropriate alternative — pause, downgrade, standalone prescription, return at any time. No hard sell — patient led.
+ Step 6 — Decision recorded: Full outcome logged in HubSpot (reason category + outcome: Retained / Paused / Downgraded / Exited) and Semble clinical notes updated same day.
+ Step 7 — Re-engagement pathway: HubSpot sequence activated for all non-retained outcomes. Patient never deleted from CRM. Open door communicated clearly.
+ 🟢 Exit Protocol — Clinical Sign-Off & Safe Exit
+ Doctor Nurse Health Coordinator 
+ Applies to ALL exit requests at any stage. No patient is ever cancelled without this process completed.
+ Step 1 — Pause and acknowledge: Nurse contacts patient within 5 days of any exit intent. Listen first — no pressure, no sales, no judgement.
+ Step 2 — Understand the reason: Nurse asks open questions to identify root cause — clinical concern, cost, personal circumstances, dissatisfaction, or achieved goal.
+ Step 3 — Clinical safety check: Nurse confirms patient is medically safe to pause or stop medication. If on a higher dose — tapering plan discussed. Doctor review required before any abrupt stop.
+ Step 4 — Doctor sign-off: Any patient stopping GLP-1 medication must have formal Doctor review. Tapering or cessation plan documented in Semble EHR. Doctor co-signs the exit.
+ Step 5 — Alternative solution offered: Health Coordinator presents the most appropriate alternative — pause, downgrade, standalone prescription, return at any time.
+ Step 6 — Decision recorded: Full outcome logged in HubSpot (reason + outcome: Retained / Paused / Downgraded / Exited) and Semble clinical notes updated same day.
+ Step 7 — Re-engagement pathway: HubSpot sequence activated for all non-retained outcomes. Patient never deleted from CRM. Open door communicated clearly.
+ Journey 3 of 3
+ The 90-Day Programme
+ Three months of structured MDT care. Every touchpoint, every system, every owner — and the Day 80 retention call that converts patients to Ongoing Care at €75/month.
+ Ownership key — 
+ Doctor 
+ Nurse 
+ Dietitian 
+ Health Coach 
+ Commercial 
+ Operations / Tech 
+ ℹ 
+ Retention goal: Convert every 90-Day graduate to Ongoing Care. The Day 80 proactive call from Nurse is the single most important moment in the entire patient lifecycle. 
+ Month-by-month MDT schedule with owners
+ Service element | 
+ Month 1 | 
+ Month 2 | 
+ Month 3 | 
+ Owner | 
+ System | 
+ Patient-facing notes | 
+ | 
+ Doctor consultation | 
+ ✓ Video (10 min) | 
+ — | 
+ ✓ Video (10 min) | 
+ Doctor | 
+ Semble | 
+ Titration & dose review. Month 1 and Month 3 only. | 
+ Dietitian consultation | 
+ ✓ Video (45 min) | 
+ — | 
+ ✓ Video (45 min) | 
+ Dietitian | 
+ Semble | 
+ Full nutritional assessment Month 1. Follow-up Month 3. | 
+ Personalised nutrition plan | 
+ ✓ email/PDF | 
+ — | 
+ — | 
+ Dietitian | 
+ HubSpot | 
+ Delivered within 48hrs of Month 1 dietitian consult. | 
+ Nurse check-in | 
+ — | 
+ ✓ Video (10 min) | 
+ — | 
+ Nurse | 
+ Semble | 
+ Progress monitoring & side effect review. Month 2 only. | 
+ Health coach session | 
+ ✓ Video (30 min) | 
+ ✓ Video (30 min) | 
+ ✓ Video (30 min) | 
+ Health Coach | 
+ Semble | 
+ Goals, habits & therapeutic support every month. | 
+ Async nurse support | 
+ ✓ | 
+ ✓ | 
+ ✓ | 
+ Nurse | 
+ Semble | 
+ Clinical queries & side effects between appointments. | 
+ Prescription management | 
+ ✓ | 
+ ✓ | 
+ ✓ | 
+ Doctor | 
+ Semble | 
+ Ongoing GLP-1 prescription renewals managed by doctor. | 
+ Web App + community access | 
+ ✓ | 
+ ✓ | 
+ ✓ | 
+ Operations / Tech | 
+ Web App | 
+ Weight logging, medication tracking, content library, peer group. | 
+ Insurance documentation | 
+ ✓ | 
+ — | 
+ — | 
+ Nurse | 
+ Semble | 
+ Docs for private health insurance reclaim (~€230). Month 1 only. | 
+ HubSpot comms & sequences | 
+ ✓ | 
+ ✓ | 
+ ✓ | 
+ Commercial | 
+ HubSpot | 
+ Welcome, onboarding, engagement and retention sequences throughout. | 
+ 💬 Feedback Touchpoints — this stage
+ Month 1 — Doctor consultation close — Doctor asks: How are you feeling about the programme so far? Is there anything you felt was missing? Logged as clinical note in Semble.
+ Month 1 — Health Coach session close — Coach asks: On a scale of 1–10 how supported do you feel right now? What would make it a 10? HubSpot contact note updated.
+ Month 2 — Nurse check-in close — Nurse asks: Are you getting everything you need from the programme? Is there anything we could be doing differently? Logged in Semble + HubSpot sentiment updated.
+ Month 2 — Automated mid-programme NPS (Day 45) — HubSpot sends NPS survey (0–10). Detractors (0–6) trigger immediate Nurse outreach task. Promoters (9–10) invited to leave a testimonial.
+ Month 3 — Dietitian consultation close — Dietitian asks: How have you found the nutritional support? What would you add or change? Logged in Semble.
+ Month 3 — Doctor final consultation close — Doctor asks: Are you happy with your progress? What does continued support look like for you? Seeds the Day 80 retention conversation naturally.
+ Day 80 — Nurse retention call close — After presenting Ongoing Care: How would you rate your overall experience of the 90-Day Programme out of 10? Logged in HubSpot. Used for testimonial outreach.
+ Day 80 retention call — outcomes
+ Day 80 Call
+ Retention
+ PROACTIVE CALL ★
+ Retention call initiated
+ Reviews results, patient satisfaction, presents Ongoing Care plan and value.
+ HubSpot task Nurse 
+ COMMITS
+ Ongoing Care
+ PAYMENT
+ €75/mo Ongoing Care subscription
+ Stripe recurring subscription activated. €75 charged monthly. This is the Ongoing Care (Phase 3) plan — separate from the 90-Day Programme. Nurse sends payment link during Day 80 call.
+ Stripe Nurse 
+ →
+ SCHEDULING
+ Quarterly MD booked
+ First Phase 3 doctor appointment scheduled in Semble.
+ Semble Doctor 
+ →
+ CRM
+ Status → "Ongoing Care"
+ Welcome to Phase 3 email + SMS. Retention sequences active.
+ HubSpot Commercial 
+ →
+ AD HOC ACCESS
+ Expert sessions unlocked
+ Doctor €80 · Coach €50 · Dietitian €60 · Nurse €40. On demand.
+ Semble Nurse 
+ UNDECIDED
+ Needs time
+ TASK
+ 7-day follow-up scheduled
+ HubSpot task. Nurse assigned for follow-up call.
+ HubSpot Nurse 
+ →
+ PRESCRIPTION BRIDGE
+ Standalone prescription offered
+ Medication managed while patient decides on Ongoing Care.
+ Semble Doctor 
+ DECLINES
+ Exits
+ CRM
+ Churn workflow triggered
+ Marked as churned. Re-engagement sequence starts at 60 days.
+ HubSpot Operations / Tech 
+ →
+ PRESCRIPTION BRIDGE
+ Standalone prescription maintained
+ Doctor keeps GLP-1 prescription active as a standalone service. Patient continues medication without the Ongoing Care plan. Reviewed at next contact.
+ Semble Doctor 
+ Phase 3 — Ongoing Care system owners
+ STR
+ Stripe
+ Payments
+ €75/mo recurring subscription
+ Ad hoc session payments
+ Failure → ops workflow
+ Operations / Tech 
+ SEM
+ Semble
+ Clinical EHR
+ Quarterly MD — Doctor
+ Monthly nurse — Nurse
+ Async dietitian & coach
+ Prescription renewals — Doctor
+ Doctor Nurse 
+ HS
+ HubSpot
+ CRM & Comms
+ Status = "Ongoing Care"
+ Welcome + monthly sequences
+ Renewal & retention campaigns
+ Churn workflows
+ Commercial 
+ AIR
+ Aircall + Web App
+ Comms + Patient
+ Sticky tab for patient queries
+ Weight & medication logging
+ Community & content access
+ Operations / Tech 
+ 🟢 Exit Protocol — applies at any point in this journey
+ At any point a patient indicates they want to leave, pause or stop treatment — no exit is processed without a clinical sign-off call . Nurse calls within 5 days, Doctor reviews if medication is being stopped, Health Coordinator presents alternatives. Full protocol is detailed in the Deviation Pathways section below. No exceptions. 
+ Deviation pathways — all possible breakdowns 
+ 12 scenarios 
+ › 
+ ⚠ MDT appointment no-show (any member)
+ Nurse 
+ Semble flags missed appointment automatically
+ HubSpot no-show task created — assigned to Nurse
+ Nurse contacts patient within 4hrs to reschedule
+ 3 reschedule attempts before escalating to ops
+ Clinical team member notified — slot freed for rebooking
+ Persistent no-shows flagged for Nurse exit call
+ ⚠ Severe or unexpected side effects
+ Doctor 
+ Patient contacts Nurse via async Semble support
+ Nurse triages within 4hrs — logs in Semble EHR
+ Doctor reviewed same day for any serious adverse event
+ Dose paused or reduced — titration plan updated in Semble
+ HubSpot task created: Clinical Escalation — type logged
+ Patient reassured — follow-up call scheduled within 48hrs
+ If medication stopped: MDT appointments adjusted accordingly
+ ⚠ Titration not progressing as planned
+ Doctor 
+ Doctor identifies at Month 1 or Month 3 review
+ Dose schedule adjusted and updated in Semble
+ Dietitian and Health Coach informed via internal Semble note
+ Patient counselled — expectations reset for weight loss timeline
+ HubSpot clinical note added to patient record
+ ⚠ Patient disengages mid-programme (stops logging / attending)
+ Nurse 
+ Web app logging drops to zero — flagged via BBMI Web App dashboard
+ Nurse proactive outreach call triggered by ops at Day 45 if disengaged
+ Re-engagement email sequence fired via HubSpot
+ Health Coach session rescheduled if missed
+ If no response after 2 weeks — Nurse exit call attempted
+ ⚠ Prescription renewal issue or delay
+ Doctor 
+ Patient flags via async Semble nurse support
+ Nurse escalates to Doctor immediately
+ Doctor re-issues prescription via Semble same day
+ Pharmacy contacted if dispatch issue
+ HubSpot task logged: Prescription Issue — resolved date tracked
+ Bridge supply arranged if delay exceeds 5 days
+ ⚠ Day 80 retention call missed by Nurse
+ Operations / Tech 
+ HubSpot task overdue alert fires to ops immediately
+ Ops re-assigns call to available team member same day
+ Call must be completed no later than Day 85
+ Any delay beyond Day 85 flagged as critical ops failure
+ Patient receives holding email — "your review is being scheduled"
+ ⚠ Instalment payment missed during programme
+ Operations / Tech 
+ Stripe failed charge webhook fires
+ HubSpot automated retry email + SMS Day 1
+ Ops follows up by phone on Day 3
+ Clinical access maintained for 7 days pending resolution
+ If unresolved after 7 days — clinical access paused, team notified
+ Stripe subscription cancelled if unresolved after 14 days
+ ⚠ Patient requests early exit from programme
+ Nurse 
+ Nurse conducts exit call — reason logged in Semble and HubSpot
+ Refund policy applied — partial refund if within Day 30
+ Remaining instalments cancelled in Stripe
+ HubSpot status: Withdrawn — reason categorised
+ Ongoing prescription management offered as standalone
+ Re-engagement nurture sequence triggered at 60 days
+ ⚠ Clinical team member unavailable (illness / leave)
+ Operations / Tech 
+ Semble appointments reassigned to cover practitioner
+ Patient notified immediately via HubSpot email
+ Appointment rescheduled within 5 working days
+ If Doctor unavailable — prescriptions managed by alternate Doctor
+ Ops monitors all open appointments daily during cover period
+ ⚠ Patient declines Ongoing Care at Day 80
+ Nurse 
+ Nurse logs decline reason in Semble and HubSpot
+ Standalone prescription offered — Doctor maintains GLP-1 prescription as a separate service. No Ongoing Care plan required.
+ Prescription bridge offered — Doctor maintains prescription standalone
+ HubSpot churn workflow triggered — 60-day re-engagement sequence
+ Patient remains in CRM — never deleted
+ Ops reviews decline reasons monthly to identify retention improvements
+ ⚠ Patient requests data or record access
+ Operations / Tech 
+ GDPR subject access request — must respond within 30 days
+ Semble exports clinical notes and history
+ HubSpot exports CRM and communications history
+ Ops compiles and sends via secure encrypted email
+ ✕ Serious adverse clinical event
+ Doctor 
+ Any serious adverse event escalated to Doctor immediately
+ Medication paused pending clinical review
+ Patient referred to GP or emergency services if required
+ Clinical incident logged in Semble with full notes
+ Regulatory reporting obligations reviewed by Doctor
+ Founder notified same day — all programme activity paused for affected patient
+ 🟢 Exit Protocol — Clinical Sign-Off & Safe Exit
+ Doctor Nurse Health Coordinator 
+ Applies to ALL exit requests at any stage. No patient is ever cancelled without this process completed.
+ Step 1 — Pause and acknowledge: Nurse contacts patient within 5 days of any exit intent. Listen first — no pressure, no sales, no judgement.
+ Step 2 — Understand the reason: Nurse asks open questions to identify root cause — clinical concern, cost, personal circumstances, dissatisfaction, or achieved goal.
+ Step 3 — Clinical safety check: Nurse confirms patient is medically safe to pause or stop medication. If on a higher dose — tapering plan discussed. Doctor review required before any abrupt stop.
+ Step 4 — Doctor sign-off: Any patient stopping GLP-1 medication must have formal Doctor review. Tapering or cessation plan documented in Semble EHR. Doctor co-signs the exit.
+ Step 5 — Alternative solution offered: Health Coordinator presents the most appropriate alternative — pause, downgrade, standalone prescription, return at any time. No hard sell — patient led.
+ Step 6 — Decision recorded: Full outcome logged in HubSpot (reason category + outcome: Retained / Paused / Downgraded / Exited) and Semble clinical notes updated same day.
+ Step 7 — Re-engagement pathway: HubSpot sequence activated for all non-retained outcomes. Patient never deleted from CRM. Open door communicated clearly.
+ KPIs & Metrics
+ What to Measure — Success Dashboard
+ Filter by role to see what matters to you, or by source system to see what each tool tracks. Every metric shows its source and reporting frequency.
+ Funnel overview — target conversion rates
+ Website visitors
+ 100%
+ All traffic to site
+ Google Analytics 
+ €89 booked
+ Target
+ Visitor → consultation
+ SET BASELINE
+ Stripe HubSpot 
+ 90-Day committed
+ ≥60%
+ Consult → programme
+ WITHIN 21 DAYS
+ HubSpot Stripe 
+ Ongoing Care
+ ≥70%
+ 90-Day → €75/mo
+ DAY 80 CALL
+ HubSpot Stripe 
+ Retained 6mo+
+ ≥50%
+ Ongoing Care retention
+ ONGOING
+ Stripe HubSpot 
+ Filter by role — see what matters to you 
+ All metrics 
+ CEO 
+ Sales & Marketing 
+ Finance 
+ Operations 
+ Filter by source system — see what each tool tracks 
+ All systems 
+ HubSpot 
+ Aircall  (incl. capacity) 
+ Stripe 
+ Semble  (incl. capacity) 
+ BBMI Web App 
+ Google Analytics 
+ No metrics match the selected filters. Try a different combination.
+ Traffic & Awareness
+ Owner: Commercial
+ Monthly website visitors
+ Total unique visitors to beyondbmi.ie
+ Google Analytics 
+ Monthly 
+ CTA click-through rate
+ % of visitors who click any CTA (1, 2 or 3)
+ Google Analytics HubSpot 
+ Weekly 
+ CTA split: CTA 1 vs CTA 2 vs CTA 3
+ % of total leads entering via each pathway
+ HubSpot Aircall 
+ Weekly 
+ Lead source breakdown
+ Organic / paid / referral / social / direct — where patients come from
+ Google Analytics HubSpot 
+ Monthly 
+ Sales Conversion
+ Owner: Care Coordinator / Commercial
+ CTA 1 — online booking conversion rate
+ % of visitors who start booking and complete €89 payment online
+ Stripe HubSpot 
+ Weekly 
+ CTA 2 — call answer rate
+ % of sticky tab calls answered vs missed during business hours. Target: 0 missed.
+ Aircall 
+ Daily 
+ CTA 2 — call-to-payment conversion rate
+ % of answered calls that result in €89 payment. Target: ~50%
+ Aircall HubSpot Stripe 
+ Weekly 
+ CTA 3 — booked-call-to-payment rate
+ % of scheduled sales callbacks that result in €89 payment
+ HubSpot Aircall Stripe 
+ Weekly 
+ Average call handling time
+ Mean duration of sales calls — informs agent capacity and staffing
+ Aircall 
+ Monthly 
+ Missed call recovery rate
+ % of missed CTA 2 calls successfully called back within 2hrs
+ Aircall HubSpot 
+ Weekly 
+ Booking Quality
+ Owner: Operations / Tech
+ No-show rate
+ % of booked consultations where patient does not attend
+ Semble HubSpot 
+ Weekly 
+ Payment failure rate
+ % of attempted €89 payments that fail — flagged in Stripe dashboard
+ Stripe 
+ Weekly 
+ Reschedule rate
+ % of consultations rescheduled vs cancelled outright
+ Semble HubSpot 
+ Weekly 
+ Day 5–7 Follow-Up
+ Owner: Nurse
+ Day 5–7 call completion rate
+ % of follow-up calls completed by Nurse within the Day 5–7 window
+ HubSpot 
+ Weekly 
+ Medication compliance rate
+ % of patients who have received medication and started it by Day 5–7
+ Semble HubSpot 
+ Weekly 
+ Side effect flag rate
+ % of patients flagging side effects requiring clinical escalation
+ Semble 
+ Weekly 
+ Day 21 Commitment
+ Owner: Care Coordinator
+ Day 21 call completion rate
+ % of commitment calls made within the Day 21 window
+ HubSpot 
+ Weekly 
+ 90-Day conversion rate
+ % of €89 patients who commit to 90-Day Programme. Target: ≥60%
+ HubSpot Stripe 
+ Weekly 
+ Time to conversion
+ Average days from consultation to 90-Day payment. Target: ≤21 days
+ HubSpot 
+ Monthly 
+ Upfront vs instalment split
+ % choosing €450 upfront vs €499 (3x €166) — impacts cash flow forecasting
+ Stripe 
+ Monthly 
+ Top 3 objection reasons
+ Logged by Care Coordinator on every declined call — cost / timing / other
+ HubSpot Manual log 
+ Monthly 
+ Nurture re-engagement rate
+ % of declined patients who re-engage and book within 90 days
+ HubSpot 
+ Monthly 
+ Clinical Engagement — 90-Day Programme
+ Owner: Doctor / Nurse / MDT
+ MDT appointment attendance rate
+ % of booked MDT appointments attended across all clinical members
+ Semble 
+ Monthly 
+ Web App active usage rate
+ % of 90-Day patients logging weight at least weekly in the BBMI web app
+ BBMI Web App 
+ Weekly 
+ Average weight loss at Day 90
+ Mean kg lost across all 90-Day completions — key clinical outcome metric
+ Semble 
+ Monthly 
+ Titration progression rate
+ % of patients reaching target GLP-1 dose within 90 days
+ Semble 
+ Monthly 
+ Retention & Revenue
+ Owner: Nurse / Commercial
+ Day 80 retention call completion rate
+ % of Day 80 calls made by Nurse on time — most critical operational KPI
+ HubSpot 
+ Weekly 
+ Ongoing Care conversion rate
+ % of 90-Day completions who move to €75/mo. Target: ≥70%
+ HubSpot Stripe 
+ Monthly 
+ Monthly Recurring Revenue (MRR)
+ Total active €75/mo subscriptions × €75 — core revenue metric
+ Stripe 
+ Monthly 
+ Ongoing Care churn rate
+ % of €75/mo subscribers cancelling each month
+ Stripe HubSpot 
+ Monthly 
+ Average months retained (Phase 3)
+ Mean subscription length before cancellation — drives LTV calculation
+ Stripe 
+ Quarterly 
+ Revenue & LTV
+ Owner: Commercial / Founder
+ Revenue per patient (full journey)
+ €89 + €450 + (€75 × avg months). Track by monthly cohort.
+ Stripe HubSpot 
+ Monthly 
+ Ad hoc session revenue
+ Total monthly revenue from on-demand expert sessions (Phase 3 members only)
+ Stripe 
+ Monthly 
+ Patient satisfaction score (NPS)
+ Net Promoter Score surveyed at Day 90 and 6 months
+ HubSpot Survey 
+ Quarterly 
+ Referral rate
+ % of new patients referred by an existing member — lowest cost acquisition channel
+ HubSpot 
+ Monthly 
+ ⚙ Team Capacity & Utilisation
+ Owner: Operations / CEO — Sources: Semble (clinical) · Aircall (sales)
+ ⓘ  Semble tracks clinical session time per practitioner (Doctor, Nurse, Dietitian, Health Coach) including appointment duration and async interactions.  
+ Aircall tracks total time on calls per care coordinator, average call duration, and agent availability — confirmed via Aircall Analytics dashboard.
+ Doctor — total consultation hours per week
+ Total hours spent in patient consultations (€89 consults + 90-Day Month 1 & 3 reviews). Identifies when additional doctor capacity is needed.
+ Semble 
+ Weekly 
+ Doctor — slots available vs booked (%)
+ % of available doctor appointment slots that are filled. Below 70% = under-demand. Above 90% = at-capacity risk — need to add slots or doctors.
+ Semble 
+ Weekly 
+ Nurse — total clinical hours per week
+ Hours across: Month 2 nurse check-ins, Day 5–7 follow-up calls, Day 80 retention calls, and async patient support. Flags if Nurse is over-stretched.
+ Semble 
+ Weekly 
+ Nurse — async response time (hrs)
+ Average time to respond to patient async queries via Semble. Target: <4 hours during business hours. Rising response time = capacity pressure signal.
+ Semble 
+ Weekly 
+ Dietitian — total consultation hours per week
+ Hours across Month 1 (45 min) and Month 3 (45 min) dietitian consults across all active 90-Day patients. Used to plan contractor capacity.
+ Semble 
+ Weekly 
+ Dietitian — slots available vs booked (%)
+ % of dietitian slots filled across all active 90-Day patients. Useful for forecasting contractor hours needed as patient volume grows.
+ Semble 
+ Monthly 
+ Health Coach — total session hours per week
+ Hours across monthly health coach sessions (30 min × all active 90-Day patients). Every 90-Day patient requires a coach session every month.
+ Semble 
+ Weekly 
+ Health Coach — slots available vs booked (%)
+ % of health coach slots filled. Health coach is the only MDT member needed every month — highest volume touchpoint in the 90-Day Programme.
+ Semble 
+ Weekly 
+ Clinical team — max patient load at current headcount
+ Based on available hours per role, the maximum number of active 90-Day patients the team can handle simultaneously before a new hire or contractor is needed. Track monthly as volume grows.
+ Semble 
+ Monthly 
+ Care Coordinator — total call time per week
+ Total hours each care coordinator spends on live calls (CTA 2 inbound + CTA 3 scheduled callbacks). Tracked per agent in Aircall Analytics dashboard.
+ Aircall 
+ Weekly 
+ Care Coordinator — average call duration
+ Mean minutes per sales call. Benchmarks agent efficiency — too short may indicate dropped conversations, too long may signal process issues or over-explanation.
+ Aircall 
+ Weekly 
+ Care Coordinator — availability rate (%)
+ % of business hours each agent is available to take calls. Aircall tracks login/logout and available vs unavailable status. Informs staffing coverage decisions.
+ Aircall 
+ Weekly 
+ Care Coordinator — calls handled per day
+ Total inbound + outbound calls per agent per day. Helps identify if a single agent can handle current volume or if a second agent is needed.
+ Aircall 
+ Daily 
+ Revenue per clinical hour
+ Total revenue generated ÷ total clinical hours worked across all practitioners. Key efficiency metric — shows how much each hour of clinical time is worth to the business.
+ Semble Aircall 
+ Monthly 
+ → 90-Day → Ongoing Care Conversion & Ad-Hoc Revenue
+ Owner: Nurse / Commercial / CEO — Sources: Stripe · HubSpot · Semble
+ ⓘ  These metrics track the transition from the 90-Day Programme into Ongoing Care (€75/mo) and the incremental revenue from ad-hoc expert sessions (Doctor €80 · Coach €50 · Dietitian €60 · Nurse €40). Both are Phase 3 only.
+ 90-Day → Ongoing Care conversion rate
+ % of patients who complete the 90-Day Programme and commit to the €75/mo Ongoing Care plan. Measured at Day 80 call. Target: ≥70%. This is the single most important retention metric — every percentage point is a recurring €75/mo subscriber.
+ HubSpot Stripe 
+ Monthly 
+ Day 80 call completion rate
+ % of Day 80 retention calls made by Nurse on time (within Days 78–82). If this drops below 100% it directly impacts conversion. Must be monitored weekly — any missed call requires same-day ops escalation.
+ HubSpot 
+ Weekly 
+ 90-Day → Ongoing Care decline reasons
+ Top reasons patients decline at Day 80 — logged by Nurse on every declined call in HubSpot. Categories: Cost / Achieved goal / Not ready / Clinical concern / Switching provider / No reason. Review monthly — top reason informs retention script and pricing strategy.
+ HubSpot 
+ Monthly 
+ Time from 90-Day completion to Ongoing Care activation
+ Average days between a patient completing Day 90 and their first €75 subscription payment. Target: same day as Day 80 call or within 3 days. A long gap risks cold feet — Stripe subscription should be activated during the call.
+ Stripe 
+ Monthly 
+ Ongoing Care churn rate (monthly)
+ % of active €75/mo subscribers who cancel in a given month. Target: <3%/month. Above 5%/month = critical — more than half the base lost annually. Stripe tracks cancellations; HubSpot logs exit reasons.
+ Stripe HubSpot 
+ Monthly 
+ Average Ongoing Care subscription length
+ Mean number of months a patient stays on the €75/mo plan before cancelling. Every additional month = €75 LTV. Target: ≥6 months average. Track as a rolling cohort average — not just the current active base.
+ Stripe 
+ Quarterly 
+ Ad-hoc session revenue (monthly)
+ Total monthly revenue from on-demand expert sessions booked by Phase 3 members. Doctor €80 · Coach €50 · Dietitian €60 · Nurse €40. Track total and per-session-type. Growing ad-hoc revenue signals strong patient engagement and adds meaningful MRR uplift.
+ Stripe Semble 
+ Monthly 
+ Ad-hoc sessions booked per active member (monthly)
+ Average number of ad-hoc sessions booked per active Phase 3 member per month. A rate above 0.5 sessions/member/month is a strong signal of engagement. Below 0.1 suggests members aren't aware of or aren't using the add-on — flag for commercial to address in retention sequences.
+ Semble 
+ Monthly 
+ Ad-hoc session split by type
+ Breakdown of ad-hoc bookings by practitioner type: Doctor / Health Coach / Dietitian / Nurse. Highest demand type = clearest patient need — use to inform future service design and staffing. Low Doctor ad-hoc = patients feel well-managed. High Nurse = clinical support demand.
+ Semble 
+ Monthly 
+ Total Phase 3 revenue per patient (LTV)
+ Full lifetime value of a Phase 3 patient: (€75 × months retained) + ad-hoc session revenue. Benchmark target: €75 × 12 months = €900 base LTV. With ad-hoc sessions averaging €50–80 per booking, engaged patients should exceed €1,000 annual value. Track per cohort.
+ Stripe 
+ Quarterly 
+ Reporting cadence & owners
+ Cadence
+ Key metrics
+ Owner
+ Source systems
+ Daily
+ CTA 2 call answer rate, missed calls, payment failures
+ Operations 
+ Aircall Stripe 
+ Weekly
+ €89 bookings, CTA conversion rates, no-shows, Day 5–7 and Day 21 call completion, web app usage
+ Commercial 
+ HubSpot Aircall Semble 
+ Monthly
+ 90-Day → Ongoing Care conversion rate, churn rate, MRR, ad-hoc revenue and split by type, revenue per patient, objection analysis, referral rate
+ Commercial 
+ HubSpot Stripe 
+ Quarterly
+ NPS, average LTV, avg months retained, clinical outcomes (weight loss, titration)
+ Doctor 
+ Commercial 
+ Semble HubSpot Stripe 
+ Phase 3 — Ongoing Care
+ Ongoing Care — €75/month or €150/month
+ Long-term care. Peace of mind for your sustainable health journey. Available to patients who have completed the 90-Day Programme. Choose €75/month (quarterly doctor, nurse support, prescription management) or €150/month (continue full MDT structure). Quarterly medical oversight, monthly nurse support, asynchronous specialist access and community — all in one plan.
+ Ownership key — 
+ Doctor 
+ Nurse 
+ Health Coordinator 
+ Dietitian 
+ Health Coach 
+ Commercial 
+ Operations / Tech 
+ ✓ 
+ Entry condition: Patient must have completed the 90-Day Programme. The €75/mo Ongoing Care plan is only available post-90-Day completion — it is never offered or presented during the €89 consultation or 90-Day Programme stages. Enrolment is offered at the Day 80 retention call by the Nurse and confirmed by the Health Coordinator if required. Not available as a standalone entry point — it is a continuation of care, not a new subscription. 
+ 🔄 
+ Two pathways into Ongoing Care — following the Day 80 nurse retention call. Option A: patient self-serves via the BBMI web app. Option B: nurse facilitates the switch on the Day 80 call itself. 
+ Entry pathways — two options to move into Ongoing Care
+ Option A — Self-serve Web App
+ Patient switches to Ongoing Care via Web App
+ 🤖 Automated Web App 
+ After Day 80 call, patient hits CTA button in the BBMI web app: "Continue with Ongoing Care"
+ Presented with two options:
+ €75/month — quarterly doctor + nurse support + prescription management
+ €150/month — continue full 90-Day MDT structure
+ Patient selects plan — Stripe subscription activated automatically Stripe 
+ Patient books quarterly doctor appointment via Semble widget Semble 
+ 24hr & 1hr reminders auto-sent for each appointment Semble 
+ Welcome to Ongoing Care email auto-sent HubSpot 
+ Monthly pulse check + quarterly NPS surveys auto-enrolled HubSpot 
+ Option B — Nurse Facilitated
+ Nurse switches patient on Day 80 Call
+ Nurse Aircall 
+ Nurse presents both options on Day 80 call:
+ Option A: €75/month (quarterly doctor, nurse, prescription)
+ Option B: €150/month (continue full MDT)
+ Patient confirms choice — nurse marks outcome in HubSpot HubSpot 
+ HubSpot triggers Stripe: previous subscription updated to chosen plan Stripe 
+ Nurse books first quarterly doctor appointment in Semble on patient's behalf Semble 
+ Patient receives automated confirmation + reminders Semble HubSpot 
+ Welcome to Ongoing Care email auto-sent HubSpot 
+ Monthly pulse check + quarterly NPS surveys auto-enrolled HubSpot 
+ Enrolment pathway — how a patient gets here
+ Day 80 Call
+ Retention trigger
+ PROACTIVE CALL
+ Nurse retention call
+ Nurse reviews 90-Day results, patient satisfaction and introduces Ongoing Care plan and value.
+ Semble Nurse 
+ →
+ HANDOFF
+ Health Coordinator if needed
+ If patient wants pricing/commercial detail — Nurse hands off warmly to Health Coordinator. No pressure.
+ Aircall Health Coordinator 
+ →
+ COMMITMENT
+ €75/mo Ongoing Care activated
+ Stripe €75/mo recurring subscription activated. Payment link sent during Day 80 call. Only available post-90-Day Programme — never offered earlier in the journey.
+ Stripe Health Coordinator 
+ →
+ ONBOARDING
+ Welcome to Phase 3
+ HubSpot welcome email + SMS. First quarterly MD scheduled in Semble. Community access confirmed.
+ HubSpot Commercial 
+ UNDECIDED
+ Not ready at Day 80
+ TASK
+ 7-day follow-up scheduled
+ HubSpot task created for Nurse or Health Coordinator to follow up within 7 days.
+ HubSpot Nurse 
+ →
+ BRIDGE
+ Prescription maintained
+ Doctor keeps prescription active while patient considers. No gap in medication.
+ Semble Doctor 
+ →
+ NURTURE
+ Re-engagement sequence
+ HubSpot 30-day email sequence. Open door — patient can enrol any time.
+ HubSpot Commercial 
+ DECLINES
+ Exits at Day 80
+ EXIT CALL
+ Nurse logs decline reason
+ Reason logged in HubSpot: Cost / Clinical outcome / Personal / Switching provider / No reason given.
+ HubSpot Nurse 
+ →
+ PRESCRIPTION
+ Standalone prescription offered
+ Patient can continue medication via Doctor without the full plan. Priced separately.
+ Semble Doctor 
+ →
+ CHURN WORKFLOW
+ 60-day re-engagement
+ HubSpot churn workflow activated. Re-engagement email at Day 30 and Day 60.
+ HubSpot Commercial 
+ Ongoing Care — what the patient gets every month
+ Service element | 
+ Frequency | 
+ Format | 
+ Owner | 
+ System | 
+ Patient-facing notes | 
+ | 
+ Doctor consultation | 
+ Quarterly | 
+ Video/phone (10 min) | 
+ Doctor | 
+ Semble | 
+ Medical review, dose assessment, prescription renewal. Once every 3 months. | 
+ Nurse check-in | 
+ Monthly | 
+ Video/phone (10 min) | 
+ Nurse | 
+ Semble | 
+ Progress monitoring, side effect review, medication check. Every month. | 
+ Async dietitian support | 
+ On demand | 
+ Async messaging | 
+ Dietitian | 
+ Semble | 
+ Nutritional questions and guidance available asynchronously. Response within 48hrs. | 
+ Async health coach support | 
+ On demand | 
+ Async messaging | 
+ Health Coach | 
+ Semble | 
+ Habit, lifestyle and motivation support available asynchronously. Response within 48hrs. | 
+ Prescription management | 
+ Ongoing | 
+ Managed by Doctor | 
+ Doctor | 
+ Semble | 
+ GLP-1 prescription renewed at each quarterly MD review. Delivered via Pure Pharmacy. | 
+ Reactive clinical support | 
+ Ongoing | 
+ Async / urgent call | 
+ Nurse | 
+ Semble | 
+ Clinical queries, side effects, urgent concerns handled by Nurse. Escalated to Doctor if needed. | 
+ Community access | 
+ Ongoing | 
+ Web App | 
+ Operations / Tech | 
+ Web App | 
+ Peer support group. Shared experiences, recipes, motivation. Active throughout Phase 3. | 
+ Medication home delivery | 
+ Per prescription | 
+ Pure Pharmacy | 
+ Operations / Tech | 
+ Semble | 
+ Medication dispatched directly to patient's door. No pharmacy visit required. | 
+ HubSpot comms & sequences | 
+ Ongoing | 
+ Email + SMS | 
+ Commercial | 
+ HubSpot | 
+ Monthly engagement emails, appointment reminders, retention sequences, renewal nudges. | 
+ Stripe recurring billing | 
+ Monthly | 
+ Automatic | 
+ Operations / Tech | 
+ Stripe | 
+ €75 charged automatically each month. Patient receives receipt. Cancel any time. | 
+ 💬 Feedback Touchpoints — this stage
+ Monthly Nurse check-in — close of every call — Nurse asks: How are you feeling about the programme this month? Are you getting what you need? Nurse logs sentiment in Semble + HubSpot: Positive / Neutral / At-Risk.
+ Quarterly MD consultation — close — Doctor asks: How are you finding the level of medical oversight? Is there anything clinically we should be addressing? Logged in Semble clinical notes.
+ Monthly automated pulse check (HubSpot) — 2-question email sent on the 15th of each month: (1) How supported do you feel right now? 1–5. (2) Is there anything you need from us this month? Responses routed to Nurse task if score ≤2.
+ Quarterly NPS survey (HubSpot) — Full NPS every 3 months. Detractors trigger Nurse welfare call. Passives trigger Health Coordinator re-engagement call. Promoters invited into referral programme.
+ Post ad-hoc session — automated same day — HubSpot sends 1–5 star rating request for the session. Used to quality-monitor individual practitioners.
+ Cancellation exit survey — 3-question survey: (1) Why are you leaving? (2) What could we have done differently? (3) Would you recommend BBMI to a friend? Feeds directly into retention strategy review.
+ Add-on expert support — available to Phase 3 members only
+ ℹ 
+ Ad hoc sessions are booked on demand via Semble — no waiting list, book as often as needed. Available exclusively to active Ongoing Care (Phase 3) members. Billed per session via Stripe at point of booking. 
+ Doctor
+ 20 min · Video/phone
+ €80
+ Clinical review, medication query, urgent concern
+ Doctor 
+ Health Coach
+ 25 min · Video/phone
+ €50
+ Habits, motivation, accountability session
+ Health Coach 
+ Dietitian
+ 25 min · Video/phone
+ €60
+ Nutritional review, meal planning, plateau support
+ Dietitian 
+ Nurse
+ 25 min · Video/phone
+ €40
+ Clinical query, side effect review, injection support
+ Nurse 
+ Systems & owners — Phase 3 ongoing
+ STR
+ Stripe
+ Payments
+ €75/mo recurring subscription active
+ Ad hoc session payments per booking
+ Payment failure → ops workflow
+ Cancellation → churn workflow to HubSpot
+ All receipts auto-issued
+ Operations / Tech 
+ SEM
+ Semble
+ Clinical EHR
+ Quarterly MD appointments — Doctor
+ Monthly nurse check-ins — Nurse
+ Async dietitian & coach support
+ Prescription renewals — Doctor
+ Ad hoc session booking
+ Reactive clinical support — Nurse
+ Doctor Nurse 
+ HS
+ HubSpot
+ CRM & Comms
+ Status = "Ongoing Care Active"
+ Monthly engagement sequences
+ Appointment reminders (24hr & 1hr)
+ Renewal & retention campaigns
+ Churn reason logged on cancellation
+ 60-day re-engagement on churn
+ Commercial 
+ AIR
+ Aircall + Web App
+ Calls + Patient
+ Sticky tab for patient queries — Sales
+ Weight & medication logging — Web App
+ Community peer group — Web App
+ Digital content library — Web App
+ All calls logged to HubSpot
+ Operations / Tech 
+ 🟢 Exit Protocol — applies at any point in this journey
+ At any point a patient indicates they want to leave, pause or stop treatment — no exit is processed without a clinical sign-off call . Nurse calls within 5 days, Doctor reviews if medication is being stopped, Health Coordinator presents alternatives. Full protocol is detailed in the Deviation Pathways section below. No exceptions. 
+ Deviation pathways — all possible breakdowns in this journey 
+ 10 scenarios 
+ › 
+ ⚠ Monthly €75 payment fails
+ Operations / Tech 
+ Stripe failed charge webhook fires to HubSpot
+ Automated retry email + SMS sent Day 1
+ Ops follow-up call on Day 3
+ Clinical access maintained for 7 days pending resolution
+ If unresolved after 7 days — access paused, team notified
+ Subscription cancelled if unresolved after 14 days
+ HubSpot churn workflow triggered on cancellation
+ ⚠ Patient cancels subscription
+ Nurse 
+ Nurse conducts exit call — reason logged in Semble and HubSpot
+ Reason categories: Cost / Clinical / Personal / Switching / Achieved goal / No reason
+ Standalone prescription offered if patient wants to continue medication
+ Stripe subscription cancelled immediately
+ HubSpot churn workflow — 60-day re-engagement sequence
+ Patient remains in CRM — never deleted
+ ⚠ Patient misses quarterly MD appointment
+ Nurse 
+ Semble flags no-show — HubSpot task created for Nurse
+ Nurse contacts patient within 4hrs to reschedule
+ Prescription not renewed until MD review completed
+ Bridge supply issued if medication running low — Doctor authorises
+ 3 missed attempts → Nurse exit call to understand engagement
+ ⚠ Side effects or clinical concern arises
+ Doctor 
+ Patient contacts via async Semble nurse support
+ Nurse triages within 4hrs — logs in Semble EHR
+ Doctor reviewed same day for any serious event
+ Dose paused or adjusted — titration plan updated in Semble
+ HubSpot task logged: Clinical Escalation
+ Patient reassured — follow-up call within 48hrs
+ ⚠ Patient plateaus — weight loss stalls
+ Doctor 
+ Flagged at quarterly MD or by Nurse at monthly check-in
+ Doctor reviews dose — consider titration adjustment
+ Dietitian ad hoc session recommended to patient
+ Health Coach session recommended for habit review
+ HubSpot task: Plateau — follow-up at next monthly nurse check-in
+ Patient counselled — plateaus are normal and manageable
+ ⚠ Prescription renewal delayed
+ Doctor 
+ Patient flags via async nurse support or at monthly check-in
+ Nurse escalates to Doctor immediately
+ Doctor re-issues prescription via Semble same day
+ Pure Pharmacy contacted if dispatch issue
+ HubSpot task logged: Prescription Issue — resolved date tracked
+ Bridge supply arranged if delay exceeds 5 days
+ ⚠ Clinical team member unavailable
+ Operations / Tech 
+ Semble appointments reassigned to cover practitioner
+ Patient notified via HubSpot email immediately
+ Appointment rescheduled within 5 working days
+ If Doctor unavailable — prescriptions managed by alternate Doctor
+ Ops monitors all open appointments daily during cover period
+ ⚠ Patient requests downgrade or pause
+ Nurse 
+ Nurse welfare call to understand reason
+ Pause option: subscription paused for up to 30 days — prescription maintained
+ Downgrade option: standalone prescription only offered at reduced cost
+ HubSpot status updated: Paused or Downgraded
+ Re-engagement sequence triggered at 30 days if paused
+ ⚠ Patient reaches goal weight and wants to stop medication
+ Doctor 
+ Doctor conducts review — confirms goal weight sustained for minimum 4 weeks
+ Tapering plan discussed and documented in Semble
+ Ongoing Care can continue without medication component — community, coach and nurse only
+ If stopping plan entirely — Nurse exit call, HubSpot churn workflow
+ Celebrated as a positive outcome — patient encouraged to refer others
+ ✕ Serious adverse clinical event
+ Doctor 
+ Any serious adverse event escalated to Doctor immediately
+ Medication paused pending clinical review
+ Patient referred to GP or emergency services if required
+ Clinical incident logged in Semble with full notes
+ Regulatory reporting obligations reviewed by Doctor
+ Founder notified same day
+ 🟢 Exit Protocol — Clinical Sign-Off & Safe Exit
+ Doctor Nurse Health Coordinator 
+ Applies to ALL exit requests at any stage. No patient is ever cancelled without this process completed.
+ Step 1 — Pause and acknowledge: Nurse contacts patient within 5 days of any exit intent. Listen first — no pressure, no sales, no judgement.
+ Step 2 — Understand the reason: Nurse asks open questions to identify root cause — clinical concern, cost, personal circumstances, dissatisfaction, or achieved goal.
+ Step 3 — Clinical safety check: Nurse confirms patient is medically safe to pause or stop medication. If on a higher dose — tapering plan discussed. Doctor review required before any abrupt stop.
+ Step 4 — Doctor sign-off: Any patient stopping GLP-1 medication must have formal Doctor review. Tapering or cessation plan documented in Semble EHR. Doctor co-signs the exit.
+ Step 5 — Alternative solution offered: Health Coordinator presents the most appropriate alternative — pause, downgrade, standalone prescription, return at any time. No hard sell — patient led.
+ Step 6 — Decision recorded: Full outcome logged in HubSpot (reason category + outcome: Retained / Paused / Downgraded / Exited) and Semble clinical notes updated same day.
+ Step 7 — Re-engagement pathway: HubSpot sequence activated for all non-retained outcomes. Patient never deleted from CRM. Open door communicated clearly.
+ Action list
+ To Implement
+ Everything agreed in the journey mapping session that needs to be built before the patient journey runs fully automated. Nothing here is a nice-to-have — each item is a gap in the current operational flow.
+ ⚠ 
+ Priority order: Art's webhook items 1 and 2 (Day 5–7 and Day 21 task automation) are the most urgent — they directly affect clinical safety and sales follow-up. Do these first. 
+ Art — Tech / HubSpot Workflows (9 items)
+ Priority 1
+ Do first
+ ART — ITEM 1 🔧
+ Day 5–7 Nurse Call Task
+ When: doctor consultation marked complete in Semble.
+Action: HubSpot auto-creates task assigned to Nurse, due Day 6.
+Timed from: consultation completion date (not payment date).
+ Semble HubSpot Nurse 
+ ART — ITEM 2 🔧
+ Day 21 Care Coordinator Call Task
+ When: doctor consultation marked complete in Semble.
+Action: HubSpot auto-creates task assigned to Care Coordinator, due Day 21.
+Timed from: consultation completion date (not payment date).
+ Semble HubSpot Care Coordinator 
+ ART — ITEM 3 🔧
+ Education Sequence Trigger
+ When: Nurse marks Day 5–7 call complete in HubSpot.
+Action: HubSpot auto-enrols patient into Days 1–20 education email sequence.
+Note: must fire after nurse call, not immediately post-consultation.
+ HubSpot Nurse 
+ Priority 2
+ 90-Day automation
+ ART — ITEM 4 🔧
+ Day 80 Nurse Retention Task
+ When: 90-Day programme payment confirmed in Stripe.
+Action: HubSpot auto-creates Day 80 nurse retention call task, due Day 80.
+Timed from: 90-Day programme start date.
+Also: HubSpot sends patient heads-up email on Day 78.
+ Stripe HubSpot Nurse 
+ ART — ITEM 5 🔧
+ Semble Booking Widget + Spacing Rules
+ Build: Semble booking widget for 90-Day MDT appointments (Doctor, Dietitian, Health Coach, Nurse).
+Enforce spacing rules: ~4 weeks between each monthly appointment, ±7 days flexibility window.
+Same widget for Ongoing Care quarterly bookings.
+ Semble Stripe 
+ ART — ITEM 6 🔧
+ 24hr + 1hr Appointment Reminders
+ When: any MDT appointment booked in Semble.
+Action: Semble auto-sends email + SMS to patient at 24hrs and 1hr before appointment.
+Applies to: all Doctor, Nurse, Dietitian, Health Coach appointments across 90-Day and Ongoing Care.
+ Semble HubSpot 
+ ART — ITEM 7 🔧
+ No-Show → Reschedule Task
+ When: Semble flags a patient as no-show for any MDT appointment.
+Action: HubSpot auto-creates reschedule task assigned to CS Team (Monika).
+Patient also receives automated reschedule prompt via email.
+ Semble HubSpot CS — Monika 
+ Priority 3
+ Payment automation
+ ART — ITEM 8 🔧
+ Stripe Webhook → HubSpot Workflows
+ Build all Stripe → HubSpot automations:
+· Failed payment → CS task (Monika) + retry email to patient
+· Subscription activated (€75 or €150/month) → welcome comms
+· Subscription cancelled → alumni re-engagement sequence
+· Day 21 outcome (committed) → correct Stripe plan activated
+· Day 80 outcome (€75 or €150 continue) → plan updated automatically
+ Stripe HubSpot CS — Rahela 
+ ART — ITEM 9 🔧
+ Prescription Renewal Automation
+ When: prescription approaching expiry (to be defined — e.g. 7 days before).
+Action: HubSpot sends renewal reminder to patient + creates Doctor task in Semble.
+Applies to: all active 90-Day and Ongoing Care patients on GLP-1 medication.
+ HubSpot Semble Doctor 
+ Alejandro — Commercial / Content (3 items)
+ Content
+ Email templates
+ ALEJANDRO — ITEM 1 🔧
+ Welcome Email — €89 Programme
+ Trigger: €89 Stripe payment confirmed.
+Content to include:
+· What BeyondBMI is and what to expect
+· How the Day 0 consultation works
+· FAQs and common medication side effects
+· What happens after the consultation (Day 5–7 nurse call, Day 21 care coordinator call)
+· How to contact the team
+Build in: HubSpot email template.
+ HubSpot Commercial 
+ ALEJANDRO — ITEM 2 🔧
+ Welcome Email — 90-Day Programme
+ Trigger: 90-Day Stripe payment confirmed.
+Content to include:
+· Full programme overview — Month 1, 2 and 3 schedule
+· How to book, cancel or reschedule appointments (CTA links to Semble)
+· Who the care team is (Doctor, Nurse, Dietitian, Health Coach)
+· FAQs, side effects, expected outcomes
+· Appointment spacing rules explained simply
+Build in: HubSpot email template.
+ HubSpot Commercial 
+ ALEJANDRO — ITEM 3 🔧
+ Ad Hoc Session Upsell Emails
+ Audience: Ongoing Care members (€75/month and €150/month).
+Content: light-touch elevator pitch for paid add-on 1:1 sessions with Health Coach and Dietitian.
+Frequency: periodic — not more than monthly.
+CTA: direct booking link to Semble for ad hoc session.
+Build in: HubSpot sequence.
+ HubSpot Commercial 
+ 90-Day Appointment Scheduling Rules
+ 📅 
+ Scheduling rule: All MDT appointments must be booked within a ±7 day window of their target month. The Semble booking widget should enforce this where possible. 
+ Appointment | 
+ Target Month | 
+ Spacing from previous | 
+ Window | 
+ Owner | 
+ System | 
+ | 
+ Doctor — initial review | 
+ Month 1 | 
+ Programme start + 0–7 days | 
+ ±7 days | 
+ Doctor | 
+ Semble | 
+ Dietitian — initial review | 
+ Month 1 | 
+ Same week as Month 1 doctor | 
+ ±7 days | 
+ Dietitian | 
+ Semble | 
+ Health Coach — session 1 | 
+ Month 1 | 
+ Programme start + 0–7 days | 
+ ±7 days | 
+ Health Coach | 
+ Semble | 
+ Nurse — check-in | 
+ Month 2 | 
+ ~4 weeks after Month 1 doctor | 
+ ±7 days | 
+ Nurse | 
+ Semble | 
+ Health Coach — session 2 | 
+ Month 2 | 
+ ~4 weeks after session 1 | 
+ ±7 days | 
+ Health Coach | 
+ Semble | 
+ Doctor — final review | 
+ Month 3 | 
+ ~4 weeks after Month 2 nurse | 
+ ±7 days | 
+ Doctor | 
+ Semble | 
+ Dietitian — follow-up | 
+ Month 3 | 
+ ~8 weeks after Month 1 dietitian | 
+ ±7 days | 
+ Dietitian | 
+ Semble | 
+ Health Coach — session 3 | 
+ Month 3 | 
+ ~4 weeks after session 2 | 
+ ±7 days | 
+ Health Coach | 
+ Semble | 
+ Day 80 — Nurse retention call | 
+ Day 80 | 
+ Day 78–82 window | 
+ ±2 days | 
+ Nurse | 
+ Aircall | 
+ ✓ 
+ Booking note: CTA A (self-serve via web app) — patient books all MDT appointments via Semble widget immediately after payment. CTA B (Care Coordinator-led) — care coordinator books all MDT slots in Semble on the patient's behalf during the Day 21 call. In both cases, the spacing rules above apply. 
+ 

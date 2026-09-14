@@ -3,7 +3,9 @@
 *Product brief for anyone (human or agent) building screens. Distilled from `docs/research/` on 2026-09-11. Read before writing UI.*
 
 ## What this is
-The new patient-facing web app for Beyond BMI, an Irish doctor-led GLP-1 weight-management clinic. It replaces the Angular app at app.beyondbmi.ie. **Semble** (UK practice-management EHR, GraphQL API) is the clinical system of record from 1 Sep 2026: patients, clinicians, availability, bookings, video links, clinical notes, letters, prescriptions, invoices, reminders. **Stripe** stays the biller. **This portal** owns identity, the patient journey, entitlement and booking rules, weight tracking, documents presentation, and billing state.
+The new patient-facing web app for Beyond BMI, an Irish doctor-led GLP-1 weight-management clinic. It replaces the Angular app at app.beyondbmi.ie. **Semble** (UK practice-management EHR, GraphQL API) is the intended clinical system of record: patients, clinicians, availability, bookings, video links, clinical notes, letters, prescriptions, invoices, reminders. **Stripe** stays the biller. **This portal** owns identity, the patient journey, entitlement and booking rules, weight tracking, documents presentation, and billing state.
+
+> **Semble is not connected yet.** There is no Beyond BMI tenant or token available, so the whole portal runs on the mock adapter with synthetic patients, and the real GraphQL adapter has never been run against a live practice. Every screen is still designed against what Semble can actually do, so the shape does not change when it is connected — only the adapter behind it does. See `DEPLOY.md` and the `/architecture` page.
 
 Semble has **no patient login, no dashboard, no two-way messaging, no subscription billing** — its "patient portal" is an emailed document link with DOB 2FA, and its communications are outbound only (`sendEmail` / `sendSms`, read back one patient at a time). So everything the patient sees here is ours; Semble is a back-end, and anything the portal shows has to be something Semble can actually hold (see **Out of scope for now**).
 

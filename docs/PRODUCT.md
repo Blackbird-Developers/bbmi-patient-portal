@@ -25,8 +25,10 @@ Semble has **no patient login, no dashboard, no two-way messaging, no subscripti
 3. 90-Day Programme (€399 upfront or €150×3): 8 MDT appointments in month bands — Doctor M1+M3, Dietitian M1+M3, Health Coach M1/M2/M3, Nurse M2 — booked in order per role, each in a window; Day 80 results call.
 4. Ongoing Care (€75/mo: quarterly doctor, monthly nurse, prescriptions; €150/mo: full MDT) + ad-hoc sessions (Doctor €80 · Coach €50 · Dietitian €60 · Nurse €40).
 
-## Information architecture (4 tabs + account)
-**Home** (one primary card per stage, task list, next appointment, this week) · **Prescriptions** (read-only list of what the doctor has issued in Semble, each with its delivery status — issued → sent to pharmacy → dispensed → runs out; nothing to download, nothing to edit) · **Progress** (weight trend, weigh-in, goal) · **Care** (who your care team is, how to reach the clinic, when to get help) · **Account** (profile, billing & plan, documents, settings).
+## Information architecture (5 tabs + account)
+**Home** (one primary card per stage, task list, next appointment, this week) · **Appointments** (the diary: upcoming with the join window, past, and the booking flow and 90-day programme underneath it) · **Prescriptions** (read-only list of what the doctor has issued in Semble, each with its delivery status — issued → sent to pharmacy → dispensed → runs out; nothing to download, nothing to edit) · **Progress** (weight trend, weigh-in, goal) · **Care** (who your care team is, how to reach the clinic, when to get help, and your documents) · **Account** (profile, billing & plan, settings).
+
+Appointments is top-level because it is the first thing a patient comes here to check. Booking and the programme sit under it, since both are ways of getting something into the diary.
 
 Routes: `/` home · `/prescriptions` · `/progress` · `/care` (team + contact) · `/appointments` · `/programme` · `/book/[type]` · `/documents` · `/account` · `/account/billing` · `/plans` · `/forms/[slug]` · `/architecture` (presenter page).
 

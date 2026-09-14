@@ -40,7 +40,7 @@ Radii: chips/inputs 8px (`rounded-sm`), cards 16px (`rounded-lg`), sheets 20px (
 
 ## Shell
 - ≥1024px: 248px navy left rail (logo lockup, 5 nav items with icons, care-team snippet, persona switcher at the bottom in demo mode) + content column + optional right context rail.
-- <1024px: navy top bar (logo, avatar) + bottom tab bar (Home · Prescriptions · Progress · Care · Account), 44px targets, active tab in `blue-soft` pill.
+- <1024px: navy top bar (logo, avatar) + bottom tab bar (Home · Appts · Scripts · Progress · Care), 44px targets, active tab in `blue-soft` pill. Account is not a tab on mobile — the avatar in the top bar already goes there, and six tabs do not fit legibly on a phone. Tabs whose full label is too wide carry a `shortLabel`; never let a tab label truncate to an ellipsis.
 - A skip link. Visible focus ring (3px blue at 55%). Reduced motion honoured.
 
 ## Components (in `src/components/ui`)

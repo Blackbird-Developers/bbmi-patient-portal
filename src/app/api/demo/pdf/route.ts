@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
   // Prescriptions are never downloadable by the patient: the script goes from the
   // doctor to the pharmacy. Refused here too so a guessed URL cannot mint one.
   if (kind === "prescription") return new Response("Prescriptions are not available to download", { status: 403 });
-  const title = kind === "prescription" ? "Prescription" : kind === "invoice" ? "Receipt" : "Document";
+  const title = kind === "invoice" ? "Receipt" : "Document";
   const pdf = minimalPdf([
     `Beyond BMI - ${title}`,
     `Reference: ${id}`,

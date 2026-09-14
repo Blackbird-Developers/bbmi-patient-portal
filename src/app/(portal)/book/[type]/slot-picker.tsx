@@ -267,12 +267,12 @@ export function SlotPicker({ slots, clinicians, type, rangeStartUtc, rangeEndUtc
                   </ButtonLink>
                 ) : (
                   <ButtonLink variant="secondary" href="/care">
-                    Message your care team
+                    Your care team
                   </ButtonLink>
                 )
               }
             >
-              {windowNote ? "Message your care team and they will find a time that works for you." : "Look further ahead, or message your care team and they will find a time."}
+              {windowNote ? "Call or email the care team and they will find a time that works for you." : "Look further ahead, or call the care team and they will find a time."}
             </EmptyState>
           ) : (
             <>

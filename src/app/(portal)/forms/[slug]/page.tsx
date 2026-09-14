@@ -55,7 +55,7 @@ export default async function FormPage({ params, searchParams }: { params: Promi
               </dl>
             </section>
           ))}
-          <p className="mt-4 text-[12px] text-muted">To correct something, message the care team — your doctor updates the record.</p>
+          <p className="mt-4 text-[12px] text-muted">To correct something, call or email the care team — your doctor updates the record.</p>
         </Card>
       </div>
     );

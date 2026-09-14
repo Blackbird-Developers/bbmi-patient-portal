@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export default async function PortalLayout({ children }: { children: ReactNode }) {
   const user = await requireUser();
   const j = await loadJourney(user);
-  const badges = { "/care": j.unreadMessages || undefined, "/": j.openTasks || undefined };
+  const badges = { "/": j.openTasks || undefined };
   return (
     <AppShell user={user} badges={badges} demoUsers={listDemoUsers()} sembleMode={sembleMode()}>
       {children}

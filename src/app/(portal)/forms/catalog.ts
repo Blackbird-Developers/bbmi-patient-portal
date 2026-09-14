@@ -77,8 +77,8 @@ export const FORMS: Record<string, FormDef> = {
         title: "This week",
         questions: [
           { id: "overall", type: "radio", label: "Overall, how are you getting on with the medication?", options: ["Great", "Okay", "Struggling"], required: true },
-          { id: "effects", type: "checkbox-group", label: "Any of these since your first dose?", options: ["Nausea", "Constipation", "Tiredness", "Headache", "Injection-site reaction", "Dizziness", "None"] },
-          { id: "note", type: "textarea", label: "Anything for your nurse?", placeholder: "Optional" },
+          { id: "effects", type: "checkbox-group", label: "Any of these since you started?", options: ["Nausea", "Constipation", "Tiredness", "Headache", "Injection-site reaction", "Dizziness", "None"] },
+          { id: "note", type: "textarea", label: "Anything your nurse should know?", hint: "Your nurse reads this before your check-in call.", placeholder: "Optional" },
         ],
       },
     ],

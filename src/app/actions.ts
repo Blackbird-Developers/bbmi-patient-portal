@@ -4,8 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser, signIn, signInAs, signOut } from "@/lib/auth";
 import { getSemble, SembleAdapterError } from "@/lib/semble";
-import { addWeight, completeTask, continueToOngoing, logDose, markConsultBooked, markQuestionnaireDone, setPaymentResolved, upgradeToNinetyDay } from "@/lib/portal/store";
-import type { InjectionSite, SideEffect } from "@/lib/portal/types";
+import { addWeight, completeTask, continueToOngoing, markConsultBooked, markQuestionnaireDone, setPaymentResolved, upgradeToNinetyDay } from "@/lib/portal/store";
 
 /* ---------------------------------------------------------------- auth */
 export async function signInAction(formData: FormData) {
@@ -38,17 +37,6 @@ export async function logWeightAction(formData: FormData) {
   completeTask(u.userId, "weight");
   revalidatePath("/", "layout");
   redirect("/progress?logged=1");
-}
-
-/* ---------------------------------------------------------------- treatment */
-export async function logDoseAction(formData: FormData) {
-  const u = await requireUser();
-  const site = String(formData.get("site") ?? "abdomen-left") as InjectionSite;
-  const doseMg = Number(formData.get("doseMg"));
-  const sideEffects = formData.getAll("sideEffects").map(String) as SideEffect[];
-  logDose(u.userId, { doseMg, site, sideEffects, note: String(formData.get("note") ?? "") || undefined });
-  revalidatePath("/", "layout");
-  redirect("/treatment?logged=1");
 }
 
 /* ---------------------------------------------------------------- tasks / forms */
@@ -111,16 +99,6 @@ export async function rescheduleAction(formData: FormData) {
   });
   revalidatePath("/", "layout");
   redirect(`/appointments?rescheduled=${a.id}`);
-}
-
-/* ---------------------------------------------------------------- messages */
-export async function sendMessageAction(formData: FormData) {
-  const u = await requireUser();
-  const body = String(formData.get("body") ?? "").trim();
-  const channel = (String(formData.get("channel") ?? "clinical") === "admin" ? "admin" : "clinical") as "clinical" | "admin";
-  if (body) await getSemble().sendMessage(u.semblePatientId, channel, body);
-  revalidatePath("/care");
-  redirect("/care?sent=1");
 }
 
 /* ---------------------------------------------------------------- plans / billing (Stripe in production) */

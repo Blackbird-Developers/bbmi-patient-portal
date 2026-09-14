@@ -4,7 +4,6 @@ import { loadJourney } from "@/lib/portal/journey";
 import { HeadlineCard } from "@/components/features/headline-card";
 import { TaskList } from "@/components/features/task-list";
 import { NextAppointmentCard } from "@/components/features/appointment-card";
-import { NextDoseCard } from "@/components/features/next-dose-card";
 import { WeightCard } from "@/components/features/weight-card";
 import { ProgrammeSteps } from "@/components/features/programme-steps";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -16,7 +15,7 @@ import { StatusTag } from "@/components/ui/status-tag";
 import { clinicianDisplay, euro, fmtDate, nowMs, relativeDay, ROLE_LABEL } from "@/lib/format";
 import { payInstalmentAction } from "@/app/actions";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, MessageSquare, Package, CreditCard } from "lucide-react";
+import { ArrowRight, Package, CreditCard, Users } from "lucide-react";
 
 export default async function HomePage({ searchParams }: { searchParams: Promise<{ welcome?: string; resumed?: string }> }) {
   const sp = await searchParams;
@@ -42,7 +41,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         {j.state === "ninety_day_overdue" && m.paymentIssue ? (
           <Card tone="warn">
             <CardHeader title="Pay your missed instalment to resume" sub={`${euro(m.nextChargeAmount ?? 150)} · instalment ${(m.instalmentsPaid ?? 0) + 1} of 3 · unsuccessful since ${fmtDate(m.paymentIssue.since)}`} />
-            <p className="text-[14px] text-ink-soft">While the programme is paused you can&apos;t book or join appointments. Everything you&apos;ve booked and logged is kept.</p>
+            <p className="text-[14px] text-ink-soft">While the programme is paused you can&apos;t book or join appointments. Your appointments and your weight history are kept.</p>
             <div className="mt-4 flex flex-wrap gap-2">
               <form action={payInstalmentAction}>
                 <Button type="submit" iconLeft={<CreditCard className="size-4" />}>
@@ -59,14 +58,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
 
         {j.nextAppointment ? <NextAppointmentCard a={j.nextAppointment} canJoin={j.can.join} locked={!j.can.join ? "Joining is paused until your payment is resolved." : undefined} /> : null}
 
-        {j.nextDose ? (
-          <div className="grid gap-6 md:grid-cols-2">
-            <NextDoseCard dose={j.nextDose} compact />
-            <WeightCard w={j.weight} />
-          </div>
-        ) : j.state !== "consult_paid" ? (
-          <WeightCard w={j.weight} />
-        ) : null}
+        {j.state !== "consult_paid" ? <WeightCard w={j.weight} /> : null}
 
         {j.programme ? <ProgrammeSteps programme={j.programme} /> : null}
 
@@ -127,8 +119,8 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
                 Runs out around {fmtDate(rx.reviewDueUtc)} {new Date(rx.reviewDueUtc).getTime() - nowMs() < 10 * 86_400_000 ? <StatusTag status="pending" className="ml-1">Review soon</StatusTag> : null}
               </div>
             ) : null}
-            <Link href="/treatment" className="mt-3 inline-flex items-center gap-1 text-[13px] font-medium text-blue-text hover:underline">
-              Treatment details <ArrowRight className="size-3.5" />
+            <Link href="/prescriptions" className="mt-3 inline-flex items-center gap-1 text-[13px] font-medium text-blue-text hover:underline">
+              Prescription details <ArrowRight className="size-3.5" />
             </Link>
           </Card>
         ) : null}
@@ -150,11 +142,9 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           ) : (
             <p className="text-[13px] text-muted">You&apos;ll meet your doctor first. A nurse, dietitian and health coach join on the 90-Day Programme.</p>
           )}
-          {j.can.message ? (
-            <ButtonLink href="/care" variant="secondary" size="sm" className="mt-4 w-full" iconLeft={<MessageSquare className="size-4" />}>
-              Message your nurse{j.unreadMessages ? ` · ${j.unreadMessages} new` : ""}
-            </ButtonLink>
-          ) : null}
+          <ButtonLink href="/care" variant="secondary" size="sm" className="mt-4 w-full" iconLeft={<Users className="size-4" />}>
+            Your care team
+          </ButtonLink>
         </Card>
 
         {m.plan ? (

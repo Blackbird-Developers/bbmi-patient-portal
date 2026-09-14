@@ -3,21 +3,36 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { StatusTag } from "@/components/ui/status-tag";
 import { Check, Minus } from "lucide-react";
 
-const OWNERSHIP: [string, string, string, string, string][] = [
-  // capability, portal, semble, stripe, hubspot
+const OWNERSHIP: [string, string, string, string, string, string?][] = [
+  // capability, portal, semble, stripe, hubspot, note
   ["Identity & login (sessions, 2-step)", "own", "—", "—", "—"],
   ["Journey stage (9 states) & what's next", "own", "reads bookings", "reads subscriptions", "mirrors stage"],
   ["Booking rules: windows, order, allocation, gates", "own", "—", "—", "—"],
   ["Clinicians, availability, bookings", "UI", "own", "—", "—"],
   ["Video consultations", "Join button", "own (link per booking)", "—", "—"],
   ["Clinical notes & letters", "shows shared items", "own", "—", "—"],
-  ["Prescriptions", "delivery status, PDF on click", "authored & stored", "—", "—"],
+  ["Prescriptions", "read-only view", "authored & stored", "—", "—", "The script goes from the doctor to the pharmacy, so the patient has nothing to download."],
   ["Questionnaires", "form UI, gating", "stores answers", "—", "—"],
-  ["Weight & dose logging, side effects", "own", "summary at review", "—", "—"],
-  ["Messaging (patient → nurse)", "own thread", "logged on record", "—", "—"],
+  ["Weight tracking", "own", "—", "—", "—", "Already in today's portal, and it gates doctor booking: a weigh-in inside the last 45 days."],
   ["Appointment reminders", "—", "own (templates)", "—", "—"],
   ["Plans, instalments, invoices, card", "billing state & copy", "clinic invoices", "own", "—"],
   ["Day 5–7 · day 21 · day 80 tasks", "signals", "—", "webhooks", "own (tasks)"],
+  ["Patient messaging", "not built", "not built", "not built", "not built", "Semble sends but cannot receive, so there is no system of record for a thread and no inbox for staff to work from."],
+];
+
+const NOT_BUILT: [string, string][] = [
+  [
+    "Patient messaging",
+    "Semble's communications are outbound only — a patient reply goes to the practice mailbox and never reaches Semble, and messages can only be read one patient at a time, so there is nowhere for a thread to land until we decide where a nurse reads it.",
+  ],
+  [
+    "Dose diary, injection-site tracking and side-effect check-ins",
+    "None of it exists in today's portal and Semble has no model for it, so it would be a new clinical record with no home in the system of record.",
+  ],
+  [
+    "Prescription downloads",
+    "The script goes from the doctor straight to the pharmacy, so there is nothing for the patient to print.",
+  ],
 ];
 
 const FACTS: [string, string][] = [
@@ -26,7 +41,8 @@ const FACTS: [string, string][] = [
   ["Availability in ≤7-day windows", "Longer ranges return nothing; ranges ending 23:59:59 return nothing. The adapter chunks on clean day boundaries."],
   ["Rate limit at HTTP 200", "240 requests a minute, signalled by a GraphQL error containing 'too often'. Retried with backoff inside the adapter; bursts can block the whole token."],
   ["Pagination duplicates ~13% of rows", "Every list is de-duplicated by id before it reaches a screen."],
-  ["Patient messages are opt-in on API bookings", "Every create/update passes sendPatientMessages explicitly so confirmations and reminders fire."],
+  ["Communications are outbound only", "Semble can send a patient an email or an SMS and log it on the record, but a reply goes to the practice mailbox and never comes back in — and communications are readable only one patient at a time, so staff have no inbox. That is why patient messaging is not in this portal."],
+  ["Booking messages are opt-in on the API", "Every create/update passes sendPatientMessages explicitly so confirmations and reminders fire."],
   ["No createdBy on bookings", "Portal bookings are stamped with metadata so support can tell them apart."],
   ["Prescriptions are read-only", "Semble can author and serve a prescription (15-minute PDF URL) but cannot create or send one. Delivery to Pure Pharmacy or a Healthmail address stays with the portal."],
   ["Semble Pay is not available in Ireland", "No recurring billing either. Stripe stays the biller; Semble holds clinic invoices."],
@@ -63,13 +79,14 @@ const DECISIONS = [
   "Migration cohort and coexistence order: which patients move to Semble, and endpoint-by-endpoint webhook moves off the old backend.",
   "Prescription delivery: Pure Pharmacy home delivery flow, Healthmail email with the Semble PDF, SignatureRX for NI; where the pharmacy directory lives.",
   "Ongoing Care naming and prices in the chooser (Terms say Premium €150 / Core €75; marketing says Ongoing Care); the finisher chooser is dark on prod today.",
-  "Messaging SLA the team can actually keep (nurse 4 business hours; care team 1 working day) — the design publishes it.",
+  "Patient messaging, if it is ever wanted: where a reply is read (practice mailbox, a helpdesk, or a portal-owned inbox), who answers it and inside what SLA. Semble cannot hold the thread, so nothing is built until that is answered.",
   "Which historical claims and outcome numbers may appear inside the portal (HPRA/advertising rules; no medication names outside the clinical context).",
 ];
 
 function Tick({ v }: { v: string }) {
   if (v === "—") return <Minus className="mx-auto size-4 text-divider" aria-label="not involved" />;
   if (v === "own") return <span className="inline-flex items-center gap-1 text-[12.5px] font-medium text-lime-text"><Check className="size-3.5" strokeWidth={3} /> owns</span>;
+  if (v === "not built") return <span className="text-[12.5px] text-muted">not built</span>;
   return <span className="text-[12.5px] text-ink-soft">{v}</span>;
 }
 
@@ -103,7 +120,7 @@ function Diagram() {
         </marker>
       </defs>
       {box(20, 170, 150, 100, "Patient", ["browser / phone", "no Semble token", "no Stripe keys"], "#F5F9FB", "#E2E8E5")}
-      {box(240, 60, 300, 320, "Portal (this app)", ["identity & sessions", "journey engine · 9 stages", "booking rules · windows · gates", "treatment loop · weight · doses", "messaging · documents view", "billing state · plan copy", "Semble adapter (server only)", "webhook receiver · read model"], "#053F5C", "#032E45", "#F2F4F4")}
+      {box(240, 60, 300, 320, "Portal (this app)", ["identity & sessions", "journey engine · 9 stages", "booking rules · windows · gates", "weight tracking · progress", "documents · forms · prescriptions", "billing state · plan copy", "Semble adapter (server only)", "webhook receiver · read model"], "#053F5C", "#032E45", "#F2F4F4")}
       {box(640, 40, 240, 150, "Semble (clinical record)", ["patients · clinicians · rota", "bookings · video links", "notes · letters · prescriptions", "questionnaires · invoices", "reminders · webhooks"], "#E6EFF4", "#65A1BC")}
       {box(640, 220, 240, 90, "Stripe (biller)", ["€89 · €399 · €150×3 · €75/mo", "instalments · open invoices", "customer portal"], "#FFFFFF", "#E2E8E5")}
       {box(640, 330, 240, 90, "HubSpot (CRM)", ["lifecycle · stage mirror", "tasks: day 5–7 · 21 · 80", "Semble id write-back"], "#FFFFFF", "#E2E8E5")}
@@ -135,6 +152,22 @@ export default function ArchitecturePage() {
       </Card>
 
       <Card>
+        <CardHeader title="Deliberately not in this portal" sub="Taken out so the portal only promises what Semble, Stripe or today's portal can actually back." />
+        <ul className="divide-y divide-divider-soft">
+          {NOT_BUILT.map(([t, b]) => (
+            <li key={t} className="flex gap-3 py-2.5 first:pt-0 last:pb-0">
+              <Minus className="mt-1 size-4 shrink-0 text-muted" aria-hidden />
+              <div className="min-w-0">
+                <div className="text-[14px] font-medium leading-snug">{t}</div>
+                <p className="mt-0.5 text-[13px] text-ink-soft">{b}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-4 border-t border-divider-soft pt-3 text-[13px] text-muted">Everything else on screen is backed by Semble, Stripe or data the portal already owns today.</p>
+      </Card>
+
+      <Card>
         <CardHeader title="System diagram" sub="The patient never talks to Semble or Stripe directly." />
         <Diagram />
       </Card>
@@ -153,9 +186,12 @@ export default function ArchitecturePage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-divider-soft">
-              {OWNERSHIP.map(([c, p, s, st, h]) => (
+              {OWNERSHIP.map(([c, p, s, st, h, note]) => (
                 <tr key={c}>
-                  <th scope="row" className="py-2.5 pr-3 text-left font-medium text-ink">{c}</th>
+                  <th scope="row" className="py-2.5 pr-3 text-left font-medium text-ink">
+                    {c}
+                    {note ? <span className="mt-0.5 block max-w-[22rem] text-[12px] font-normal text-muted">{note}</span> : null}
+                  </th>
                   <td className="py-2.5 pr-3"><Tick v={p} /></td>
                   <td className="py-2.5 pr-3"><Tick v={s} /></td>
                   <td className="py-2.5 pr-3"><Tick v={st} /></td>
@@ -196,7 +232,7 @@ export default function ArchitecturePage() {
         <Card tone="positive">
           <CardHeader title="Real in this demo" />
           <ul className="space-y-1 text-[13.5px] text-ink-soft">
-            {["Journey engine and all nine states", "90-day programme windows, ordering, allocation", "Booking flow against the adapter interface", "Dose log, weigh-in, forms, messages", "Paused / overdue / completed / lapsed copy and actions", "Design system on the brand tokens"].map((x) => (
+            {["Journey engine and all nine states", "90-day programme windows, ordering, allocation", "Booking, rescheduling and cancelling against the adapter interface", "Weigh-ins, questionnaires, prescriptions and documents", "Paused / overdue / completed / lapsed copy and actions", "Design system on the brand tokens"].map((x) => (
               <li key={x} className="flex gap-2"><Check className="mt-0.5 size-4 shrink-0 text-lime-text" strokeWidth={2.5} />{x}</li>
             ))}
           </ul>

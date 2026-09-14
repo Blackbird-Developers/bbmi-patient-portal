@@ -44,7 +44,6 @@ function Comparison() {
     ["Health coach", "—", "Every month", "Async (monthly on full MDT)"],
     ["Nurse", "Day 5–7 call", "Month 2 check-in", "Monthly check-in"],
     ["Prescriptions", "30-day window", "Managed throughout", "Renewed at each review"],
-    ["Messaging", "30 days", "Throughout", "Throughout"],
     ["Community & content", "—", "Included", "Included"],
     ["Insurance documentation", "Yes", "Month 1", "—"],
   ];
@@ -84,6 +83,7 @@ export default async function PlansPage() {
   const j = await loadJourney(user);
   const m = user.membership;
   const w = j.weight;
+  const startBmi = user.goal.heightCm ? w.startKg / Math.pow(user.goal.heightCm / 100, 2) : undefined;
 
   let body: React.ReactNode;
   if (j.can.upgradeTo90Day) {
@@ -104,7 +104,7 @@ export default async function PlansPage() {
           <div className="flex flex-wrap gap-8">
             <Stat label="Since day one" value={`${w.changeKg <= 0 ? "" : "+"}${w.changeKg.toFixed(1)} kg`} sub={`${w.changePct.toFixed(1)}%`} tone={w.changeKg < 0 ? "positive" : "default"} />
             <Stat label="Appointments attended" value={j.past.filter((a) => a.status === "completed").length} />
-            {j.nextDose ? <Stat label="Current dose" value={`${j.nextDose.doseMg} mg`} /> : null}
+            {w.bmi ? <Stat label="BMI now" value={w.bmi.toFixed(1)} sub={startBmi ? `From ${startBmi.toFixed(1)} at sign-up` : undefined} /> : null}
           </div>
         </Card>
         <div className="grid gap-6 md:grid-cols-2">
@@ -113,7 +113,7 @@ export default async function PlansPage() {
         </div>
         <Card tone="soft">
           <CardHeader title="Prefer a break?" sub="Nothing is deleted. Your prescription can be bridged while you decide — your doctor sets that up." />
-          <ButtonLink href="/care?topic=break" variant="secondary" size="sm">
+          <ButtonLink href="/care" variant="secondary" size="sm">
             Talk to the team first
           </ButtonLink>
         </Card>

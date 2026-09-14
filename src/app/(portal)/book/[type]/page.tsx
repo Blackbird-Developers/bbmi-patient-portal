@@ -36,7 +36,7 @@ export default async function BookPage({ params, searchParams }: { params: Promi
 
   /* ---------- gates (server-decided, mirrored here) ---------- */
   let locked: { title: string; body: string; href?: string; label?: string } | undefined;
-  if (reschedule && !reschedule.canReschedule) locked = { title: "This appointment can no longer be moved online", body: "Inside 24 hours, message the care team and they will do their best.", href: "/care", label: "Message the care team" };
+  if (reschedule && !reschedule.canReschedule) locked = { title: "This appointment can no longer be moved online", body: "Inside 24 hours, call or email the care team and they will do their best.", href: "/care", label: "Your care team" };
   else if (!reschedule && !j.can.book) locked = { title: "Booking isn't open yet", body: j.bookingLockedReason ?? "Booking is not available on your current plan.", href: j.state === "consult_paid" ? "/forms/intake" : "/plans", label: j.state === "consult_paid" ? "Start questionnaire" : "See your options" };
   else if (sp.step && !step) locked = { title: "That programme step isn't available", body: "Go back to your programme to see what can be booked now.", href: "/programme", label: "Your programme" };
   else if (step && step.status === "booked") locked = { title: "Already booked", body: `${step.title} is booked for ${step.appointmentStartUtc ? fmtDateTime(step.appointmentStartUtc) : "a time"}. Move it from Appointments if you need a different time.`, href: "/appointments", label: "Appointments" };

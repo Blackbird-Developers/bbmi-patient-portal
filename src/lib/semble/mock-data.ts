@@ -10,7 +10,6 @@ import type {
   AppointmentType,
   Clinician,
   Invoice,
-  Message,
   PatientDocument,
   PatientProfile,
   Prescription,
@@ -441,30 +440,5 @@ export const QUESTIONNAIRES: Record<string, QuestionnaireSummary[]> = {
   "66e1a0c2f1b2a3d4e5f60006": [
     { id: "q-f-1", slug: "intake", title: "Health questionnaire", status: "completed", completedAtUtc: daysFromNow(-116) },
     { id: "q-f-2", slug: "programme-nps", title: "How was your 90-Day Programme?", status: "not-started" },
-  ],
-};
-
-export const MESSAGES: Record<string, Message[]> = {
-  "66e1a0c2f1b2a3d4e5f60001": [
-    { id: "msg-a-1", from: { kind: "clinician", clinician: clinicianById("clin-nurse-1") }, sentAtUtc: daysFromNow(-6, 14, 20), channel: "clinical", subject: "After our call today", body: "Lovely to chat, Aoife. Reminder: take your dose on the same day each week, and mild nausea in week one is expected — small meals, plenty of water. Message me here any time.", readByPatient: true },
-    { id: "msg-a-2", from: { kind: "patient" }, sentAtUtc: daysFromNow(-3, 19, 5), channel: "clinical", body: "Hi Siobhán, I had a bit of a headache after dose 2 — is that normal?", readByPatient: true },
-    { id: "msg-a-3", from: { kind: "clinician", clinician: clinicianById("clin-nurse-1") }, sentAtUtc: daysFromNow(-3, 20, 40), channel: "clinical", body: "Very common in the first weeks and usually settles. Keep fluids up and take paracetamol if needed. If it's severe or lasts more than a couple of days, let me know and I'll flag it to Dr Keogh.", readByPatient: false },
-  ],
-  "66e1a0c2f1b2a3d4e5f60002": [
-    { id: "msg-c-1", from: { kind: "clinician", clinician: clinicianById("clin-diet-1") }, sentAtUtc: daysFromNow(-31, 16, 0), channel: "clinical", subject: "Your nutrition plan", body: "Ciarán, your plan is in Documents. Aim for the protein target at breakfast first — that alone will make the biggest difference this month.", readByPatient: true },
-    { id: "msg-c-2", from: { kind: "system" }, sentAtUtc: daysFromNow(-2, 8, 6), channel: "admin", subject: "New prescription issued", body: "Dr Keogh has issued your next prescription (7.5 mg). Pure Pharmacy will dispatch it within 2 working days.", readByPatient: false },
-  ],
-  "66e1a0c2f1b2a3d4e5f60003": [
-    { id: "msg-m-1", from: { kind: "clinician", clinician: clinicianById("clin-nurse-1") }, sentAtUtc: daysFromNow(-28, 11, 30), channel: "clinical", body: "Great numbers this month, Margaret. Dr Hanlon will review your dose at the quarterly appointment.", readByPatient: true },
-  ],
-  "66e1a0c2f1b2a3d4e5f60004": [
-    { id: "msg-d-1", from: { kind: "system" }, sentAtUtc: daysFromNow(-16, 9, 0), channel: "admin", subject: "Payment didn't go through", body: "We couldn't take your instalment of €150. Update your card to keep your programme on track — your care team has been told.", readByPatient: true },
-    { id: "msg-d-2", from: { kind: "clinician", clinician: clinicianById("clin-nurse-1") }, sentAtUtc: daysFromNow(-11, 10, 10), channel: "clinical", body: "Hi Dara, we missed you at the check-in. No pressure — reply here or call and we'll get you rebooked.", readByPatient: true },
-  ],
-  "66e1a0c2f1b2a3d4e5f60005": [
-    { id: "msg-s-1", from: { kind: "system" }, sentAtUtc: daysFromNow(0, 9, 3), channel: "admin", subject: "Welcome to Beyond BMI", body: "Your consultation is paid. Complete your health questionnaire, then pick a time with one of our doctors — it usually takes about two minutes.", readByPatient: false },
-  ],
-  "66e1a0c2f1b2a3d4e5f60006": [
-    { id: "msg-f-1", from: { kind: "clinician", clinician: clinicianById("clin-nurse-1") }, sentAtUtc: daysFromNow(-12, 11, 30), channel: "clinical", subject: "Your results", body: "Fiona — 11.4 kg in 90 days and your dose is stable. Whenever you're ready, choose how you'd like to continue in the portal; I'm here if you want to talk it through first.", readByPatient: true },
   ],
 };

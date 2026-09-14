@@ -1,7 +1,7 @@
 /**
  * Portal-owned domain — everything Semble does NOT model:
  * plans & entitlements (Stripe), the 90-day programme structure, member
- * state, weight/medication logging, onboarding progress.
+ * state, weight logging, onboarding progress.
  *
  * Source of truth for the programme structure: the client's Patient Journey
  * Map v4.2.1 (docs/research/00_client_patient_journey_map_v4_2_1.txt).
@@ -25,10 +25,6 @@ export interface Plan {
   includes: string[];
 }
 
-/**
- * Member state drives what the dashboard shows. Derived server-side from
- * Stripe + programme dates, never trusted from the client.
- */
 /**
  * The nine stage names are the ones the production backend already derives
  * (`GET /api/v1/user/tier-journey/status`) and that HubSpot + staff speak.
@@ -119,8 +115,7 @@ export type Entitlement =
   | "prescriptions"
   | "community"
   | "content-library"
-  | "insurance-docs"
-  | "nurse-messaging";
+  | "insurance-docs";
 
 export interface WeightEntry {
   id: string;
@@ -130,31 +125,13 @@ export interface WeightEntry {
   source: "patient" | "clinician";
 }
 
-export interface MedicationPlan {
-  drug: string; // "Mounjaro (tirzepatide)"
-  form: "weekly-injection" | "daily-oral";
-  currentDoseMg: number;
-  titration: { fromDay: number; doseMg: number; label: string }[];
-  /** ISO weekday 1-7 the patient injects (weekly-injection only) */
-  doseWeekday?: number;
-  /** last dose taken — drives the "next dose" card */
-  lastDoseUtc?: string;
-  /** injection site rotation history */
-  sites?: { dateUtc: string; site: InjectionSite }[];
-}
-
-export type InjectionSite = "abdomen-left" | "abdomen-right" | "thigh-left" | "thigh-right" | "upper-arm-left" | "upper-arm-right";
-
-export interface DoseLog {
-  id: string;
-  takenAtUtc: string;
-  doseMg: number;
-  site?: InjectionSite;
-  sideEffects?: SideEffect[];
-  note?: string;
-}
-
-export type SideEffect = "nausea" | "constipation" | "fatigue" | "headache" | "injection-site" | "dizziness" | "other";
+/*
+ * NOTE — no medication, dose-log or side-effect types on purpose.
+ * A dose diary, injection-site tracker and side-effect check-in are not in
+ * today's portal and Semble has no model for any of them, so they are out of
+ * scope until there is somewhere clinical for that data to live.
+ * Prescriptions themselves are read from Semble (see semble/types.ts).
+ */
 
 export interface OnboardingTask {
   id: string;
@@ -185,8 +162,6 @@ export interface PortalPatient {
   membership: Membership;
   goal: Goal;
   weights: WeightEntry[];
-  medication?: MedicationPlan;
-  doses: DoseLog[];
   onboarding: OnboardingTask[];
   /** preferred clinicians for continuity (role → clinician id) */
   careTeam: Partial<Record<ClinicianRole, string>>;

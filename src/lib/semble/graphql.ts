@@ -8,7 +8,6 @@ import type {
   Clinician,
   ClinicianRole,
   Invoice,
-  Message,
   PatientDocument,
   PatientProfile,
   Prescription,
@@ -301,14 +300,4 @@ export class GraphqlSembleAdapter implements SembleAdapter {
     return []; // Semble questionnaires: patient-facing links are UI-issued; portal forms are portal-owned.
   }
 
-  async sendMessage(patientId: string, channel: Message["channel"], body: string): Promise<Message> {
-    // Patient → practice: Semble has no inbound patient-message mutation. We record it portal-side and
-    // notify the nurse mailbox via sendEmail on the practice's own record so it is visible in Semble.
-    await this.gql(`mutation SendEmail($p: ID!, $s: String!, $m: String!) { sendEmail(patientId: $p, subject: $s, message: $m) { data { id } error } }`, { p: patientId, s: `[Portal ${channel}] message from patient`, m: body });
-    return { id: `portal-${Date.now()}`, from: { kind: "patient" }, sentAtUtc: new Date().toISOString(), channel, body, readByPatient: true };
-  }
-
-  async listMessages(): Promise<Message[]> {
-    return []; // portal-owned thread store in production; Semble patientCommunications is per-patient and email-shaped
-  }
 }

@@ -86,7 +86,7 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
           <Card tone="soft" className="!p-4">
             <div className="text-[13.5px] font-medium">Missing something?</div>
             <p className="mt-0.5 text-[12.5px] text-ink-soft">
-              Letters are shared after your doctor signs them off — usually within 2 working days of an appointment. Insurance documentation is issued once, in month 1. <Link href="/care" className="text-blue-text hover:underline">Ask the care team</Link> if you need something sooner.
+              Letters are shared after your doctor signs them off — usually within 2 working days of an appointment. Insurance documentation is issued once, in month 1. <Link href="/care" className="text-blue-text hover:underline">Ask your care team</Link> if you need something sooner.
             </p>
           </Card>
         </aside>

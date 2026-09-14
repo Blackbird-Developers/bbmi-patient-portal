@@ -41,7 +41,7 @@ export function UpcomingRow({ a, canJoin, locked }: { a: Appointment; canJoin: b
       ) : locked ? (
         <p className="-mt-1 pb-3 pl-[88px] text-[12px] text-muted sm:pl-[132px]">{locked}</p>
       ) : !a.canReschedule && !a.canCancel && a.status === "confirmed" ? (
-        <p className="-mt-1 pb-3 pl-[88px] text-[12px] text-muted sm:pl-[132px]">Inside 24 hours — to move this, message the care team.</p>
+        <p className="-mt-1 pb-3 pl-[88px] text-[12px] text-muted sm:pl-[132px]">Inside 24 hours — call or email the care team to move this.</p>
       ) : null}
     </li>
   );

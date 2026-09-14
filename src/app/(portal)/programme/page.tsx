@@ -108,7 +108,7 @@ function ActiveProgramme({ j }: { j: JourneyView & { programme: NonNullable<Jour
               </>
             }
           >
-            {m.paymentIssue.message} Booking and joining are paused until it is paid; everything you have booked and logged is kept.
+            {m.paymentIssue.message} Booking and joining are paused until it is paid; your appointments and your weight history are kept.
           </Callout>
         ) : null}
 
@@ -127,7 +127,7 @@ function ActiveProgramme({ j }: { j: JourneyView & { programme: NonNullable<Jour
             </div>
             <div>
               <dt className="font-medium">Reschedule or cancel · 24 hours&apos; notice</dt>
-              <dd className="text-ink-soft">From Appointments. Inside 24 hours, message the care team.</dd>
+              <dd className="text-ink-soft">From Appointments. Inside 24 hours, call or email the team.</dd>
             </div>
             <div>
               <dt className="font-medium">Your allocation</dt>
@@ -214,11 +214,10 @@ function ActiveProgramme({ j }: { j: JourneyView & { programme: NonNullable<Jour
           <CardHeader title="Between appointments" />
           <ul className="space-y-2 text-[13.5px] text-ink-soft">
             <li>Weigh in once a week — it is the habit that matters most.</li>
-            <li>Log each dose so your doctor sees the real picture at review.</li>
-            <li>Side effects that are getting worse: message your nurse, don&apos;t wait for the next appointment.</li>
+            <li>Side effects that are getting worse: call the clinic, don&apos;t wait for the next appointment.</li>
           </ul>
           <ButtonLink href="/care" variant="link" size="sm" className="mt-3">
-            Message your nurse →
+            Your care team →
           </ButtonLink>
         </Card>
       </aside>
@@ -333,8 +332,8 @@ function OngoingCare({ j }: { j: JourneyView }) {
                 <div className="text-[14px] font-medium leading-snug">Prescription renewals</div>
                 <div className="text-[12px] text-muted">{rx?.reviewDueUtc ? `Next review around ${fmtDate(rx.reviewDueUtc)} · ${clinicianDisplay(rx.prescriber)}` : "Managed by your doctor at each review"}</div>
               </div>
-              <ButtonLink size="sm" variant="secondary" href="/treatment">
-                Treatment
+              <ButtonLink size="sm" variant="secondary" href="/prescriptions">
+                Prescriptions
               </ButtonLink>
             </li>
           </ul>

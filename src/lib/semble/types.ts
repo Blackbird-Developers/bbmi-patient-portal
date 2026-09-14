@@ -182,17 +182,14 @@ export interface QuestionnaireSummary {
   externalUrl?: string;
 }
 
-export interface Message {
-  id: string;
-  /** who wrote it */
-  from: { kind: "patient" } | { kind: "clinician"; clinician: Clinician } | { kind: "system" };
-  sentAtUtc: string;
-  subject?: string;
-  body: string;
-  readByPatient: boolean;
-  /** e.g. "clinical" (nurse async support), "admin" */
-  channel: "clinical" | "admin";
-}
+/**
+ * NOTE — no Message type on purpose.
+ * Semble has no patient-initiated messaging: it can send TO a patient
+ * (sendEmail/sendSms), but a reply goes to the practice mailbox and never
+ * enters Semble, and communications can only be read one patient at a time,
+ * so staff have no inbox. Two-way messaging is out of scope until we decide
+ * where a nurse would actually read it.
+ */
 
 export interface BookingRequest {
   appointmentTypeId: string;

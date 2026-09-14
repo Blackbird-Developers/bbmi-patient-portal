@@ -16,7 +16,7 @@ export const NINETY_DAY_STEPS: ProgrammeStep[] = [
     month: 1,
     role: "doctor",
     title: "Doctor — initial review",
-    purpose: "Titration plan, dose review and your 90-day goals with your obesity-medicine doctor.",
+    purpose: "Your medication, how you are getting on with it, and your goals for the programme.",
     durationMinutes: 10,
     format: "video",
     windowFromDay: 0,

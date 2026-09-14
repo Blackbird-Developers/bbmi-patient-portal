@@ -50,7 +50,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
               </div>
             </div>
             <ContactForm action={updateContactAction} phone={p.phone} address={p.address} />
-            <p className="mt-3 text-[12px] text-muted">Name, date of birth and email are identity fields — to change them, message the care team.</p>
+            <p className="mt-3 text-[12px] text-muted">Name, date of birth and email are identity fields — to change them, call or email the care team.</p>
           </Card>
 
           <Card>
@@ -69,7 +69,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
             <CardHeader title="Communication preferences" sub="Appointment reminders always go out by email; SMS is optional." />
             <form action={updatePreferencesAction} className="space-y-3">
               {[
-                ["receiveEmail", "Email", "Reminders, confirmations and replies from your care team", p.communicationPreferences?.receiveEmail ?? true],
+                ["receiveEmail", "Email", "Reminders, confirmations and letters from your care team", p.communicationPreferences?.receiveEmail ?? true],
                 ["receiveSMS", "SMS", "Reminders the day before and 1 hour before appointments", p.communicationPreferences?.receiveSMS ?? true],
                 ["promotionalMarketing", "News from Beyond BMI", "Occasional programme updates and webinars — never medication marketing", p.communicationPreferences?.promotionalMarketing ?? false],
               ].map(([name, label, hint, on]) => (
@@ -148,7 +148,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
           </Card>
           <Card tone="soft" className="!p-4">
             <div className="text-[13.5px] font-medium">Need to change something we can&apos;t?</div>
-            <p className="mt-0.5 text-[12.5px] text-ink-soft">Name, date of birth, email or your doctor — <Link href="/care" className="text-blue-text hover:underline">message the care team</Link>.</p>
+            <p className="mt-0.5 text-[12.5px] text-ink-soft">Name, date of birth, email or your doctor — <Link href="/care" className="text-blue-text hover:underline">call or email the care team</Link>.</p>
           </Card>
         </aside>
       </div>

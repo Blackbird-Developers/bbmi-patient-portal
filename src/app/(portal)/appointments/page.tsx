@@ -219,7 +219,7 @@ export default async function AppointmentsPage({ searchParams }: { searchParams:
               </div>
               <div>
                 <dt className="font-medium">Reschedule or cancel</dt>
-                <dd className="text-ink-soft">24 hours&apos; notice, from this page. Inside 24 hours, message the care team and they will do their best.</dd>
+                <dd className="text-ink-soft">24 hours&apos; notice, from this page. Inside 24 hours, call or email the team and they will do their best.</dd>
               </div>
               <div>
                 <dt className="font-medium">Reminders</dt>
@@ -235,7 +235,7 @@ export default async function AppointmentsPage({ searchParams }: { searchParams:
               ) : null}
             </dl>
             <ButtonLink href="/care" variant="link" size="sm" className="mt-3">
-              Message the care team →
+              Your care team →
             </ButtonLink>
           </Card>
         </aside>

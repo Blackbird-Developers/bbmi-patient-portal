@@ -6,14 +6,13 @@ import {
   CLINICIANS,
   DOCUMENTS,
   INVOICES,
-  MESSAGES,
   PATIENTS,
   PRESCRIPTIONS,
   QUESTIONNAIRES,
   clinicianById,
   now,
 } from "./mock-data";
-import type { Appointment, AvailabilitySlot, Message, PatientProfile } from "./types";
+import type { Appointment, AvailabilitySlot, PatientProfile } from "./types";
 
 /**
  * In-memory Semble. Mutations persist for the life of the dev server so a
@@ -23,7 +22,6 @@ import type { Appointment, AvailabilitySlot, Message, PatientProfile } from "./t
 export class MockSembleAdapter implements SembleAdapter {
   private patients = new Map(PATIENTS.map((p) => [p.id, { ...p }]));
   private appts = new Map(Object.entries(APPOINTMENTS).map(([k, v]) => [k, v.map((a) => ({ ...a }))]));
-  private messages = new Map(Object.entries(MESSAGES).map(([k, v]) => [k, v.map((m) => ({ ...m }))]));
   private seq = 100;
 
   private latency() {
@@ -193,17 +191,4 @@ export class MockSembleAdapter implements SembleAdapter {
     return QUESTIONNAIRES[patientId] ?? [];
   }
 
-  async sendMessage(patientId: string, channel: Message["channel"], body: string) {
-    await this.getPatient(patientId);
-    const m: Message = { id: `msg-new-${++this.seq}`, from: { kind: "patient" }, sentAtUtc: now().toISOString(), channel, body, readByPatient: true };
-    const list = this.messages.get(patientId) ?? [];
-    list.push(m);
-    this.messages.set(patientId, list);
-    return m;
-  }
-
-  async listMessages(patientId: string) {
-    await this.latency();
-    return (this.messages.get(patientId) ?? []).slice().sort((a, b) => a.sentAtUtc.localeCompare(b.sentAtUtc));
-  }
 }

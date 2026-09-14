@@ -40,7 +40,7 @@ Radii: chips/inputs 8px (`rounded-sm`), cards 16px (`rounded-lg`), sheets 20px (
 
 ## Shell
 - ≥1024px: 248px navy left rail (logo lockup, 5 nav items with icons, care-team snippet, persona switcher at the bottom in demo mode) + content column + optional right context rail.
-- <1024px: navy top bar (logo, avatar) + bottom tab bar (Home · Treatment · Progress · Care · Account), 44px targets, active tab in `blue-soft` pill.
+- <1024px: navy top bar (logo, avatar) + bottom tab bar (Home · Prescriptions · Progress · Care · Account), 44px targets, active tab in `blue-soft` pill.
 - A skip link. Visible focus ring (3px blue at 55%). Reduced motion honoured.
 
 ## Components (in `src/components/ui`)
@@ -56,7 +56,7 @@ Lucide, 1.75px stroke, 16/20/24. No emoji in UI. No medical stock icons.
 WCAG 2.2 AA. 44pt targets. Every status tag has text, not colour only. Every form field has a visible label. Errors: quiet, specific, recoverable. Times always with the Dublin day-name ("Thu 18 Sep, 10:30").
 
 ## Copy patterns
-- Card title = the thing ("Next injection"), sub = the fact ("Thursday 7pm · 5 mg · suggested site: right thigh"), one primary action ("Log dose").
+- Card title = the thing ("Next appointment"), sub = the fact ("Thu 18 Sep, 10:30 · Dr Niamh Keogh · 25 min video"), one primary action ("Join video call").
 - Rule beside the control: "Reschedule · 24 hours' notice".
 - Money: "3 monthly payments of €150 · next on 3 Oct".
 - Never: "Don't forget!", "Oops", "Something went wrong", streak flames, exclamation marks.

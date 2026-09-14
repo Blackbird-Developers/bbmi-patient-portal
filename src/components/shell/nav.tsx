@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Syringe, TrendingDown, HeartHandshake, UserRound } from "lucide-react";
+import { Home, Pill, TrendingDown, HeartHandshake, UserRound } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 export const NAV = [
   { href: "/", label: "Home", icon: Home, match: (p: string) => p === "/" },
-  { href: "/treatment", label: "Treatment", icon: Syringe, match: (p: string) => p.startsWith("/treatment") },
+  { href: "/prescriptions", label: "Prescriptions", icon: Pill, match: (p: string) => /^\/prescriptions/.test(p) },
   { href: "/progress", label: "Progress", icon: TrendingDown, match: (p: string) => p.startsWith("/progress") },
   { href: "/care", label: "Care", icon: HeartHandshake, match: (p: string) => /^\/(care|appointments|programme|book|documents)/.test(p) },
   { href: "/account", label: "Account", icon: UserRound, match: (p: string) => p.startsWith("/account") || p.startsWith("/plans") },
@@ -48,12 +48,12 @@ export function TabBar({ badges }: { badges?: Partial<Record<string, number>> })
           const Icon = n.icon;
           const badge = badges?.[n.href];
           return (
-            <li key={n.href}>
+            <li key={n.href} className="min-w-0">
               <Link href={n.href} aria-current={active ? "page" : undefined} className="relative flex min-h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-medium">
                 <span className={cn("flex h-7 w-12 items-center justify-center rounded-full transition-colors", active ? "bg-blue-soft text-blue-text" : "text-muted")}>
                   <Icon className="size-5" strokeWidth={active ? 2 : 1.75} />
                 </span>
-                <span className={active ? "text-ink" : "text-muted"}>{n.label}</span>
+                <span className={cn("w-full truncate text-center tracking-tight", active ? "text-ink" : "text-muted")}>{n.label}</span>
                 {badge ? <span className="absolute right-[18%] top-1.5 size-2 rounded-full bg-lime-deep" /> : null}
               </Link>
             </li>

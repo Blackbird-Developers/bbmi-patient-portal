@@ -1,7 +1,6 @@
 import { requireUser } from "@/lib/auth";
 import { loadJourney } from "@/lib/portal/journey";
 import { logWeightAction } from "@/app/actions";
-import { recordWinAction } from "./actions";
 import { WeightChart } from "./weight-chart";
 import { WeightLogFields } from "./weight-log-fields";
 import { PageHeader } from "@/components/ui/page-header";
@@ -13,17 +12,9 @@ import { Stat } from "@/components/ui/misc";
 import { StatusTag } from "@/components/ui/status-tag";
 import { fmtDayDate, relativeDay } from "@/lib/format";
 import { cn } from "@/lib/cn";
-import { Scale, Sparkles } from "lucide-react";
+import { Scale } from "lucide-react";
 
-const WINS_BY_STATE: Record<string, string[]> = {
-  consult_done: ["Slept through the night", "Less snacking after dinner"],
-  ninety_day_active: ["Walked to the shops instead of driving", "Cravings quieter in the evenings", "Trousers looser"],
-  legacy_member: ["Cycled with the kids at the weekend", "Blood pressure down at the GP"],
-  ninety_day_overdue: ["Kept the weekly walk going"],
-  ninety_day_completed: ["Off the blood-pressure tablet — confirmed by Dr Hanlon", "Ran my first 5 km"],
-};
-
-export default async function ProgressPage({ searchParams }: { searchParams: Promise<{ logged?: string; error?: string; win?: string }> }) {
+export default async function ProgressPage({ searchParams }: { searchParams: Promise<{ logged?: string; error?: string }> }) {
   const sp = await searchParams;
   const user = await requireUser();
   const j = await loadJourney(user);
@@ -31,7 +22,6 @@ export default async function ProgressPage({ searchParams }: { searchParams: Pro
   const down = w.changeKg < 0;
   const baseline = j.state === "consult_paid";
   const series = w.series.slice().reverse();
-  const wins = WINS_BY_STATE[j.state] ?? [];
 
   return (
     <>
@@ -41,7 +31,6 @@ export default async function ProgressPage({ searchParams }: { searchParams: Pro
         <div className="space-y-6">
           {sp.logged ? <Callout tone="positive" title="Weight logged">Thanks — your care team sees this before your next appointment.</Callout> : null}
           {sp.error === "weight" ? <Callout tone="warn" title="That doesn't look like a weight">Weights are recorded between 40 kg and 400 kg.</Callout> : null}
-          {sp.win ? <Callout tone="positive" title="Noted">Shared with your dietitian.</Callout> : null}
 
           <Card>
             <CardHeader eyebrow={baseline ? "Your starting point" : "Your trend"} title={baseline ? "Baseline from sign-up" : `${w.latestKg ? w.latestKg.toFixed(1) : "—"} kg`} sub={w.latestUtc ? `Last logged ${relativeDay(w.latestUtc)}` : undefined} />
@@ -93,37 +82,27 @@ export default async function ProgressPage({ searchParams }: { searchParams: Pro
         </div>
 
         <aside className="space-y-6">
-          <Card id="wins">
-            <CardHeader title="Beyond the scale" sub="Shared with your dietitian" action={<Sparkles className="size-5 text-blue-text" />} />
-            {wins.length ? (
-              <ul className="mb-4 space-y-1.5 text-[13.5px] text-ink-soft">
-                {wins.map((x) => (
-                  <li key={x} className="flex gap-2">
-                    <span className="mt-2 size-1.5 shrink-0 rounded-full bg-lime-deep" aria-hidden /> {x}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-            <form action={recordWinAction} className="space-y-3">
-              <Field label="A win this week" htmlFor="win" hint="Sleep, energy, clothes, cravings — anything that isn't a number.">
-                <Input id="win" name="win" maxLength={140} placeholder="For example: walked up the stairs without stopping" />
-              </Field>
-              <div className="flex flex-wrap gap-2">
-                {["Slept better", "More energy", "Clothes fit better"].map((q) => (
-                  <button key={q} type="submit" name="quick" value={q} className="min-h-9 rounded-full border border-divider bg-paper px-3 text-[12.5px] text-ink hover:border-blue hover:bg-blue-wash">
-                    {q}
-                  </button>
-                ))}
-              </div>
-              <Button type="submit" variant="secondary" size="sm">
-                Save
-              </Button>
-            </form>
-          </Card>
-
           <Card tone="soft" className="!p-4">
             <div className="text-[13.5px] font-medium">Why weekly</div>
             <p className="mt-0.5 text-[12.5px] text-ink-soft">People who weigh in every week stay on treatment longer and lose more. Daily swings are water and salt, not fat — the weekly line is what matters.</p>
+          </Card>
+
+          <Card>
+            <CardHeader title="What your team sees" sub={w.latestUtc ? `Last weight logged ${relativeDay(w.latestUtc)}` : "Nothing logged yet"} />
+            <dl className="space-y-3 text-[13px]">
+              <div>
+                <dt className="font-medium">Before each appointment</dt>
+                <dd className="text-ink-soft">Your doctor, nurse, dietitian and coach open the same trend you see here, so you don&apos;t have to recite your numbers.</dd>
+              </div>
+              <div>
+                <dt className="font-medium">Before a doctor review</dt>
+                <dd className="text-ink-soft">A weight from the last 45 days is needed before a doctor review. If yours is older than that, log one here first.</dd>
+              </div>
+              <div>
+                <dt className="font-medium">Your note</dt>
+                <dd className="text-ink-soft">Anything you add in the note box travels with the weight, so a holiday or a bad week is read in context.</dd>
+              </div>
+            </dl>
           </Card>
         </aside>
       </div>

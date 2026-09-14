@@ -35,7 +35,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
           {overdue ? (
             <Card tone="warn">
               <CardHeader title="Pay your missed instalment to resume" sub={`${euro(m.nextChargeAmount ?? 150)} · instalment ${(m.instalmentsPaid ?? 0) + 1} of 3 · unsuccessful since ${fmtDate(m.paymentIssue!.since)}`} />
-              <p className="text-[14px] text-ink-soft">{m.paymentIssue!.message} While the programme is paused you can&apos;t book or join appointments. Everything you&apos;ve booked and logged is kept.</p>
+              <p className="text-[14px] text-ink-soft">{m.paymentIssue!.message} While the programme is paused you can&apos;t book or join appointments. Your appointments and your weight history are kept.</p>
               <div className="mt-4 flex flex-wrap gap-2">
                 <form action={payInstalmentAction}>
                   <Button type="submit" iconLeft={<CreditCard className="size-4" />}>
@@ -51,8 +51,16 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
           ) : null}
           {sp.portal ? <Callout tone="info" title="Card and plan management">In production this opens the secure Stripe customer portal: update your card, download invoices, pause or cancel. In this prototype it is simulated.</Callout> : null}
           {sp.cancel ? (
-            <Callout tone="notice" title="Cancelling or pausing">
-              No one is cancelled without a conversation first: a nurse calls you within 5 days to make sure it is safe to pause or stop medication, and a coordinator talks through alternatives — pause for up to 30 days, a lighter plan, or just a break. Email support@beyondbmi.ie or use the message below and we start there. Ongoing Care needs 30 days&apos; notice.
+            <Callout
+              tone="notice"
+              title="Cancelling or pausing"
+              action={
+                <ButtonLink href="/care" size="sm" variant="secondary">
+                  Your care team
+                </ButtonLink>
+              }
+            >
+              No one is cancelled without a conversation first: a nurse calls you within 5 days to make sure it is safe to pause or stop medication, and a coordinator talks through alternatives — pause for up to 30 days, a lighter plan, or just a break. Call or email the care team and we start there. Ongoing Care needs 30 days&apos; notice.
             </Callout>
           ) : null}
 

@@ -18,7 +18,7 @@ export function CareCard({ compact = false }: { compact?: boolean }) {
       </div>
       {!compact ? (
         <div className="border-l-4 border-blue bg-blue-wash p-4">
-          <div className="text-[13px] font-semibold text-blue-text">Message your nurse or call the clinic if:</div>
+          <div className="text-[13px] font-semibold text-blue-text">Call the clinic if:</div>
           <ul className="mt-2 list-disc space-y-0.5 pl-5 text-[13.5px] text-ink-soft">
             <li>you cannot keep fluids down for more than 24 hours</li>
             <li>side effects are getting worse instead of settling</li>

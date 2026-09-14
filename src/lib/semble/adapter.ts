@@ -6,7 +6,6 @@ import type {
   BookingRequest,
   Clinician,
   Invoice,
-  Message,
   PatientDocument,
   PatientProfile,
   Prescription,
@@ -66,13 +65,11 @@ export interface SembleAdapter {
   listInvoices(patientId: string): Promise<Invoice[]>;
   listQuestionnaires(patientId: string): Promise<QuestionnaireSummary[]>;
 
-  // --- comms --------------------------------------------------------------
-  /**
-   * Patient → practice message. In Semble this lands as a patient communication
-   * / task for the nurse; the portal keeps its own thread view.
+  /*
+   * Deliberately absent: patient messaging. Semble is outbound-only and gives
+   * staff no cross-patient inbox, so there is nowhere for a reply to land.
+   * See the note in ./types.ts.
    */
-  sendMessage(patientId: string, channel: Message["channel"], body: string): Promise<Message>;
-  listMessages(patientId: string): Promise<Message[]>;
 }
 
 export class SembleAdapterError extends Error {

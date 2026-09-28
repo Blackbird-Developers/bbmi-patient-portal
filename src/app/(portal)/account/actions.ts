@@ -2,8 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireUser } from "@/lib/auth";
 import { getSemble, SembleAdapterError } from "@/lib/semble";
+import { accessToken, invalidatePatient, requireUser } from "@/lib/auth";
+import { addAddress } from "@/lib/bbmi/api";
 
 export async function updateContactAction(formData: FormData) {
   const u = await requireUser();
@@ -18,6 +19,12 @@ export async function updateContactAction(formData: FormData) {
   };
   try {
     await getSemble().updatePatientContact(u.semblePatientId, { phone, address });
+    if (u.backend && address.line1 && address.city && address.postcode) {
+      // Beyond BMI keeps its own copy (prescription delivery, the pre-consult checklist).
+      const token = await accessToken();
+      if (token) await addAddress(token, { addressLine1: address.line1, ...(address.line2 ? { addressLine2: address.line2 } : {}), city: address.city, state: address.county || address.city, postalCode: address.postcode, country: "Ireland" }).catch(() => undefined);
+      invalidatePatient(u.userId);
+    }
   } catch (e) {
     if (e instanceof SembleAdapterError) redirect(`/account?error=${e.code === "partial" ? "contact-partial" : "contact"}`);
     throw e;

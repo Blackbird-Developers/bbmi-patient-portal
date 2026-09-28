@@ -6,6 +6,12 @@ import { getSemble, sembleMode, SembleAdapterError } from "./semble";
 import { hasRole, type ClinicianRole } from "./semble/types";
 import { getPortalPatient, findUserByEmail, linkSemblePatient, LINKABLE_STAGES } from "./portal/store";
 import type { MemberState, PortalPatient } from "./portal/types";
+import { completeNewPassword, decodeJwt, revokeRefreshToken, signInWithPassword, type CognitoTokens, type SignInResult } from "./cognito";
+import { forgetTokens, openSession, rememberTokens, sealSession, SESSION_COOKIE, SESSION_MAX_AGE_S, tokensFor, type SessionData } from "./session";
+import { AccountNotReady, loadBbmiPatient } from "./bbmi/patient";
+import { getMe } from "./bbmi/api";
+import { BbmiError } from "./bbmi/client";
+import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 
 /**
  * Session — prototype implementation.
@@ -88,7 +94,133 @@ async function linkBySembleId(semblePatientId: string, stage: MemberState): Prom
   return linkSemblePatient(profile, stage, await careTeamFromSemble());
 }
 
+/** "cognito" = the real Beyond BMI patient pool + backend; "demo" = mock personas or the Semble allow-list. */
+export function authMode(): "cognito" | "demo" {
+  return process.env.PORTAL_AUTH === "cognito" ? "cognito" : "demo";
+}
+
+/* ======================================================================== Cognito mode */
+
+declare global {
+  var __portalPatients: Map<string, { at: number; patient: PortalPatient }> | undefined;
+}
+const patientCache = () => (globalThis.__portalPatients ??= new Map());
+const PATIENT_TTL_MS = 15_000;
+
+/** Drop the cached patient after anything that changes it (weight logged, address saved, purchase). */
+export function invalidatePatient(sub: string) {
+  patientCache().delete(sub);
+}
+
+async function cognitoSession(): Promise<SessionData | null> {
+  const jar = await cookies();
+  return openSession(jar.get(SESSION_COOKIE)?.value);
+}
+
+/** The signed-in patient's backend access token, or null when the session is over. */
+export async function accessToken(): Promise<string | null> {
+  const s = await cognitoSession();
+  if (!s) return null;
+  return (await tokensFor(s))?.accessToken ?? null;
+}
+
+async function cognitoUser(): Promise<PortalPatient | null> {
+  const s = await cognitoSession();
+  if (!s) return null;
+  const tokens = await tokensFor(s);
+  if (!tokens) return null;
+  const hit = patientCache().get(s.sub);
+  if (hit && Date.now() - hit.at < PATIENT_TTL_MS) return hit.patient;
+  const claims = decodeJwt<{ "cognito:groups"?: string[] }>(tokens.accessToken);
+  const patient = await loadBbmiPatient({ sub: s.sub, email: s.email, groups: claims["cognito:groups"] ?? [] }, tokens.accessToken);
+  patientCache().set(s.sub, { at: Date.now(), patient });
+  return patient;
+}
+
+async function startCognitoSession(tokens: CognitoTokens, sub: string, email: string) {
+  rememberTokens(sub, tokens);
+  const jar = await cookies();
+  jar.set(SESSION_COOKIE, sealSession({ sub, email, refreshToken: tokens.refreshToken, exp: Date.now() + SESSION_MAX_AGE_S * 1000 }), COOKIE_OPTS_LONG);
+}
+
+const COOKIE_OPTS_LONG = { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: SESSION_MAX_AGE_S } as const;
+const CHALLENGE_COOKIE = "bbmi_challenge";
+
+/** Encrypts the short-lived Cognito challenge (new-password) between the login and set-password pages. */
+function sealChallenge(v: { email: string; session: string }) {
+  const k = challengeKey();
+  const iv = randomBytes(12);
+  const c = createCipheriv("aes-256-gcm", k, iv);
+  const body = Buffer.concat([c.update(JSON.stringify({ ...v, exp: Date.now() + 5 * 60_000 }), "utf8"), c.final()]);
+  return [iv, c.getAuthTag(), body].map((b) => b.toString("base64url")).join(".");
+}
+function openChallenge(t?: string): { email: string; session: string } | null {
+  if (!t) return null;
+  try {
+    const [iv, tag, body] = t.split(".").map((p) => Buffer.from(p, "base64url"));
+    const d = createDecipheriv("aes-256-gcm", challengeKey(), iv);
+    d.setAuthTag(tag);
+    const v = JSON.parse(Buffer.concat([d.update(body), d.final()]).toString("utf8")) as { email: string; session: string; exp: number };
+    return v.exp > Date.now() ? { email: v.email, session: v.session } : null;
+  } catch {
+    return null;
+  }
+}
+function challengeKey() {
+  return createHmac("sha256", process.env.PORTAL_SESSION_SECRET ?? "").update("bbmi-portal-challenge").digest();
+}
+
+export type CognitoSignIn = { ok: true } | { ok: false; code: "bad-credentials" | "not-confirmed" | "reset-required" | "too-many" | "unavailable" | "not-ready" | "new-password" };
+
+async function finishSignIn(r: SignInResult, email: string): Promise<CognitoSignIn> {
+  if (r.kind === "new-password") {
+    const jar = await cookies();
+    jar.set(CHALLENGE_COOKIE, sealChallenge({ email, session: r.session }), { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 300 });
+    return { ok: false, code: "new-password" };
+  }
+  if (r.kind === "error") return { ok: false, code: r.code };
+  // Only start a session once the backend knows this patient (a login without a patients row answers 404).
+  try {
+    await getMe(r.tokens.accessToken);
+  } catch (e) {
+    if (e instanceof BbmiError && e.code === "not-found") return { ok: false, code: "not-ready" };
+    return { ok: false, code: "unavailable" };
+  }
+  await startCognitoSession(r.tokens, r.claims.sub, r.claims.email);
+  return { ok: true };
+}
+
+export async function signInCognito(email: string, password: string): Promise<CognitoSignIn> {
+  const e = email.trim().toLowerCase();
+  return finishSignIn(await signInWithPassword(e, password), e);
+}
+
+export async function pendingChallengeEmail(): Promise<string | null> {
+  const jar = await cookies();
+  return openChallenge(jar.get(CHALLENGE_COOKIE)?.value)?.email ?? null;
+}
+
+export async function completeChallenge(newPassword: string): Promise<CognitoSignIn> {
+  const jar = await cookies();
+  const c = openChallenge(jar.get(CHALLENGE_COOKIE)?.value);
+  if (!c) return { ok: false, code: "unavailable" };
+  const r = await completeNewPassword(c.email, c.session, newPassword);
+  if (r.kind === "ok") jar.delete(CHALLENGE_COOKIE);
+  return finishSignIn(r, c.email);
+}
+
+/** After a purchase: new Cognito groups only appear in a fresh access token. */
+export async function refreshAfterPurchase() {
+  const s = await cognitoSession();
+  if (!s) return;
+  forgetTokens(s.sub);
+  invalidatePatient(s.sub);
+}
+
+/* ======================================================================== both modes */
+
 export async function currentUser(): Promise<PortalPatient | null> {
+  if (authMode() === "cognito") return cognitoUser();
   const jar = await cookies();
   const userId = unseal(jar.get(COOKIE)?.value);
   if (!userId) return null;
@@ -102,7 +234,13 @@ export async function currentUser(): Promise<PortalPatient | null> {
 }
 
 export async function requireUser(): Promise<PortalPatient> {
-  const u = await currentUser();
+  let u: PortalPatient | null;
+  try {
+    u = await currentUser();
+  } catch (e) {
+    if (e instanceof AccountNotReady) redirect("/login?error=not-ready");
+    throw e;
+  }
   if (!u) redirect("/login");
   return u;
 }
@@ -148,6 +286,17 @@ export async function switchStage(stage: string) {
 
 export async function signOut() {
   const jar = await cookies();
+  if (authMode() === "cognito") {
+    const s = openSession(jar.get(SESSION_COOKIE)?.value);
+    if (s) {
+      forgetTokens(s.sub);
+      invalidatePatient(s.sub);
+      // Revokes the refresh token; the backend doesn't check revocation, so issued access tokens simply expire (1 h) server-side here.
+      await revokeRefreshToken(s.refreshToken);
+    }
+    jar.delete(SESSION_COOKIE);
+    return;
+  }
   jar.delete(COOKIE);
   jar.delete(STAGE_COOKIE);
 }

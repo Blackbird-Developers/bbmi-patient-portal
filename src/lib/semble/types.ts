@@ -59,6 +59,17 @@ export interface PatientProfile {
   labels?: string[];
 }
 
+export interface NewPatient {
+  firstName: string;
+  lastName: string;
+  email: string;
+  dob?: string; // YYYY-MM-DD
+  phone?: string;
+  gender?: string;
+  /** custom patient numbers to set on creation, e.g. { "BBMI ID": "<sub>" } */
+  numbers?: Record<string, string>;
+}
+
 export interface AppointmentType {
   /** Semble BookingType (Product) id */
   id: string;

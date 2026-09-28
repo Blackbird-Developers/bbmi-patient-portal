@@ -68,9 +68,9 @@ function weightSummary(p: PortalPatient, now: Date): WeightSummary {
   return { latestKg: latest?.kg, latestUtc: latest?.dateUtc, startKg: start, changeKg, changePct, targetKg, toTargetKg: latest && targetKg ? Math.round((latest.kg - targetKg) * 10) / 10 : undefined, weekDue, series, bmi };
 }
 
-function headline(p: PortalPatient, v: { nextAppointment?: Appointment; programmeDay?: number; weight: WeightSummary; questionnaireDone: boolean }): JourneyView["headline"] {
+function headline(p: PortalPatient, v: { state: MemberState; nextAppointment?: Appointment; programmeDay?: number; weight: WeightSummary; questionnaireDone: boolean }): JourneyView["headline"] {
   const first = p.firstName;
-  switch (p.membership.state) {
+  switch (v.state) {
     case "consult_paid":
       return v.questionnaireDone
         ? { title: `You're ready to book, ${first}`, body: "Pick a time with one of our doctors. Your consultation is 25 minutes by video.", ctaLabel: "Book your consultation", ctaHref: "/book/specialist-consultation", tone: "navy" }
@@ -112,7 +112,9 @@ async function buildJourney(user: PortalPatient, nowUtc = new Date().toISOString
   const nextAppointment = upcoming[0];
 
   const m = user.membership;
-  const state = m.state;
+  let state = m.state;
+  // Beyond BMI derives "consultation booked" from its own calendar, which Semble bookings don't reach yet.
+  if (user.backend && state === "consult_paid" && live.some((a) => a.type.slug === "specialist-consultation" && a.status !== "no-show")) state = "consult_booked";
   const isNinetyDay = state === "ninety_day_active" || state === "ninety_day_overdue";
   let programme: JourneyView["programme"];
   if (isNinetyDay && m.programmeStartUtc && m.programmeEndUtc) {
@@ -136,7 +138,7 @@ async function buildJourney(user: PortalPatient, nowUtc = new Date().toISOString
   return {
     user,
     state,
-    headline: headline(user, { nextAppointment, programmeDay: programme?.day, weight, questionnaireDone }),
+    headline: headline(user, { state, nextAppointment, programmeDay: programme?.day, weight, questionnaireDone }),
     nextAppointment,
     upcoming,
     past,

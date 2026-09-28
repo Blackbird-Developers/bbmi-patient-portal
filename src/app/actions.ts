@@ -2,13 +2,24 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { rememberStage, requireUser, signIn, signInAs, signOut, switchStage } from "@/lib/auth";
+import { accessToken, authMode, invalidatePatient, refreshAfterPurchase, rememberStage, requireUser, signIn, signInAs, signInCognito, signOut, switchStage } from "@/lib/auth";
 import { getSemble, SembleAdapterError } from "@/lib/semble";
+import * as bbmiApi from "@/lib/bbmi/api";
+import { BbmiError } from "@/lib/bbmi/client";
+import { loadJourney } from "@/lib/portal/journey";
+import { bookingGate } from "@/lib/portal/gates";
 import { addWeight, completeTask, continueToOngoing, markConsultBooked, markQuestionnaireDone, setPaymentResolved, upgradeToNinetyDay } from "@/lib/portal/store";
 
 /* ---------------------------------------------------------------- auth */
 export async function signInAction(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim();
+  if (authMode() === "cognito") {
+    const r = await signInCognito(email, String(formData.get("password") ?? ""));
+    if (r.ok) redirect("/");
+    if (r.code === "new-password") redirect("/set-password");
+    // The typed email is never put in the URL.
+    redirect(`/login?error=${r.code}`);
+  }
   let u;
   try {
     u = await signIn(email);
@@ -46,6 +57,20 @@ export async function logWeightAction(formData: FormData) {
   const unit = String(formData.get("unit") ?? "kg");
   const kgVal = unit === "lb" ? kgRaw * 0.45359237 : kgRaw;
   if (!Number.isFinite(kgVal) || kgVal < 40 || kgVal > 400) redirect("/progress?error=weight");
+  if (u.backend) {
+    // Stored by the Beyond BMI backend (always kg; it re-checks 40–400 kg). Weights have no note field there.
+    const token = await accessToken();
+    if (!token) redirect("/login");
+    try {
+      await bbmiApi.addWeight(token, Math.round(kgVal * 10) / 10);
+    } catch (e) {
+      if (e instanceof BbmiError) redirect(`/progress?error=${e.code === "invalid" ? "weight" : "save"}`);
+      throw e;
+    }
+    invalidatePatient(u.userId);
+    revalidatePath("/", "layout");
+    redirect("/progress?logged=1");
+  }
   addWeight(u.userId, Math.round(kgVal * 10) / 10, String(formData.get("note") ?? "") || undefined);
   completeTask(u.userId, "weight");
   revalidatePath("/", "layout");
@@ -82,14 +107,23 @@ export async function bookAction(formData: FormData) {
   const programmeStepId = String(formData.get("programmeStepId") ?? "") || undefined;
   const patientNotes = String(formData.get("notes") ?? "") || undefined;
   const typeSlug = String(formData.get("typeSlug") ?? "");
+  if (u.backend) {
+    // The Beyond BMI booking rules, enforced here because Semble won't (see lib/portal/gates.ts).
+    const [j, types] = await Promise.all([loadJourney(u), semble.listAppointmentTypes()]);
+    const type = types.find((t) => t.id === appointmentTypeId);
+    if (!type || !bookingGate(u, j.upcoming, type).ok) redirect(`/book/${typeSlug}${programmeStepId ? `?step=${programmeStepId}` : ""}`);
+  }
   let bookedId: string;
   try {
     const a = await semble.book(u.semblePatientId, { appointmentTypeId, clinicianId, startUtc, endUtc, programmeStepId, patientNotes });
     bookedId = a.id;
-    if (a.type.slug === "specialist-consultation") markConsultBooked(u.userId);
-    if (programmeStepId === "coach-s2") completeTask(u.userId, "coach-s2");
-    if (programmeStepId === "nurse-m2") completeTask(u.userId, "nurse");
-    await rememberStage(u);
+    if (u.backend) invalidatePatient(u.userId);
+    else {
+      if (a.type.slug === "specialist-consultation") markConsultBooked(u.userId);
+      if (programmeStepId === "coach-s2") completeTask(u.userId, "coach-s2");
+      if (programmeStepId === "nurse-m2") completeTask(u.userId, "nurse");
+      await rememberStage(u);
+    }
   } catch (e) {
     if (e instanceof SembleAdapterError && e.code === "unknown-outcome") redirect("/appointments?error=book-unknown");
     if (e instanceof SembleAdapterError) redirect(`/book/${typeSlug}?${new URLSearchParams({ ...(programmeStepId ? { step: programmeStepId } : {}), error: e.code === "slot-taken" ? "taken" : "unavailable" })}`);
@@ -133,9 +167,44 @@ export async function rescheduleAction(formData: FormData) {
   redirect(`/appointments?rescheduled=${id}`);
 }
 
-/* ---------------------------------------------------------------- plans / billing (Stripe in production) */
+/* ---------------------------------------------------------------- plans / billing (Stripe) */
+
+/** Update card, invoices and cancellation live in Stripe's Billing Portal (Beyond BMI mode). */
+export async function billingPortalAction() {
+  const token = await accessToken();
+  if (!token) redirect("/login");
+  let url: string;
+  try {
+    url = await bbmiApi.createBillingPortalSession(token);
+  } catch (e) {
+    if (e instanceof BbmiError) redirect("/account/billing?error=portal");
+    throw e;
+  }
+  redirect(url);
+}
+/** Beyond BMI mode: hosted Stripe Checkout (or the Billing Portal) from the backend; activation arrives by webhook. */
+async function tierCheckout(tier: "ninety_450" | "ninety_399" | "ongoing_150" | "ongoing_75"): Promise<never> {
+  const token = await accessToken();
+  if (!token) redirect("/login");
+  let url: string | undefined;
+  try {
+    const r = await bbmiApi.createTierCheckout(token, tier);
+    if (r.comp) {
+      await refreshAfterPurchase();
+      redirect("/?welcome=1");
+    }
+    url = r.url;
+  } catch (e) {
+    if (e instanceof BbmiError) redirect(`/plans?error=${e.code === "conflict" ? "not-available" : "checkout"}`);
+    throw e;
+  }
+  if (!url) redirect("/plans?error=checkout");
+  redirect(url);
+}
+
 export async function upgradeAction(formData: FormData) {
   const u = await requireUser();
+  if (u.backend) await tierCheckout(String(formData.get("plan")) === "ninety-day-upfront" ? "ninety_399" : "ninety_450");
   const plan = String(formData.get("plan")) === "ninety-day-upfront" ? "ninety-day-upfront" : "ninety-day-instalments";
   upgradeToNinetyDay(u.userId, plan);
   await rememberStage(u);
@@ -145,6 +214,7 @@ export async function upgradeAction(formData: FormData) {
 
 export async function continueAction(formData: FormData) {
   const u = await requireUser();
+  if (u.backend) await tierCheckout(String(formData.get("plan")) === "ongoing-150" ? "ongoing_150" : "ongoing_75");
   const plan = String(formData.get("plan")) === "ongoing-150" ? "ongoing-150" : "ongoing-75";
   continueToOngoing(u.userId, plan);
   await rememberStage(u);
@@ -154,6 +224,12 @@ export async function continueAction(formData: FormData) {
 
 export async function payInstalmentAction() {
   const u = await requireUser();
+  if (u.backend) {
+    // Pay THE open invoice (never a new checkout, which would bill twice); no invoice link = ask the care team.
+    const url = u.backend.billingIssue?.payUrl;
+    invalidatePatient(u.userId);
+    redirect(url ?? "/care?billing=1");
+  }
   setPaymentResolved(u.userId);
   await rememberStage(u);
   revalidatePath("/", "layout");

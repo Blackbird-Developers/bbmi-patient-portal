@@ -78,7 +78,8 @@ function Comparison() {
   );
 }
 
-export default async function PlansPage() {
+export default async function PlansPage({ searchParams }: { searchParams: Promise<{ error?: string; checkout?: string }> }) {
+  const sp = await searchParams;
   const user = await requireUser();
   const j = await loadJourney(user);
   const m = user.membership;
@@ -191,6 +192,9 @@ export default async function PlansPage() {
   return (
     <>
       <PageHeader title="Your plan options" sub="Clear, honest pricing. You only ever pay for the next stage when you choose to take it." />
+      {sp.error === "not-available" ? <Callout tone="notice" className="mb-6" title="That option isn't open for you yet">It opens at the right point in your journey. The care team can explain what&apos;s next.</Callout> : null}
+      {sp.error === "checkout" ? <Callout tone="warn" className="mb-6" title="We couldn't start the payment">Nothing was charged. Try again in a moment, or call the care team.</Callout> : null}
+      {sp.checkout === "cancelled" ? <Callout tone="info" className="mb-6" title="Payment cancelled">Nothing was charged. Your plan is unchanged.</Callout> : null}
       <div className="space-y-6">
         {body}
         <Comparison />

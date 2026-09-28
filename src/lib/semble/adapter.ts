@@ -6,6 +6,7 @@ import type {
   BookingRequest,
   Clinician,
   DocumentContent,
+  NewPatient,
   Invoice,
   PatientDocument,
   PatientProfile,
@@ -36,6 +37,12 @@ export interface SembleAdapter {
   // --- identity / profile -------------------------------------------------
   getPatient(patientId: string): Promise<PatientProfile>;
   findPatientByEmail(email: string): Promise<PatientProfile | null>;
+  /** Exact match on a custom patient number (e.g. "BBMI ID" = the Beyond BMI patient id / Cognito sub). */
+  findPatientByNumber(numberName: string, value: string): Promise<PatientProfile | null>;
+  /** Sets (adds or replaces) a custom patient number, creating the practice's number definition if needed. */
+  setPatientNumber(patientId: string, numberName: string, value: string): Promise<void>;
+  /** Creates the Semble patient for someone who has none yet (first sign-in to the portal). */
+  createPatient(input: NewPatient): Promise<PatientProfile>;
   updatePatientContact(
     patientId: string,
     patch: Partial<Pick<PatientProfile, "phone" | "address" | "communicationPreferences">>,

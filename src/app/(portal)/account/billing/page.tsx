@@ -1,7 +1,7 @@
 import { requireUser } from "@/lib/auth";
 import { loadJourney } from "@/lib/portal/journey";
 import { getSemble } from "@/lib/semble";
-import { payInstalmentAction } from "@/app/actions";
+import { billingPortalAction, payInstalmentAction } from "@/app/actions";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Callout } from "@/components/ui/callout";
@@ -17,13 +17,27 @@ const INV_STATUS: Record<string, { s: Status; label: string }> = {
   void: { s: "cancelled", label: "Void" },
 };
 
-export default async function BillingPage({ searchParams }: { searchParams: Promise<{ portal?: string; cancel?: string }> }) {
+export default async function BillingPage({ searchParams }: { searchParams: Promise<{ portal?: string; cancel?: string; error?: string }> }) {
   const sp = await searchParams;
   const user = await requireUser();
   const [j, invoices] = await Promise.all([loadJourney(user), getSemble().listInvoices(user.semblePatientId)]);
   const m = user.membership;
   const plan = m.plan;
   const overdue = j.state === "ninety_day_overdue" && m.paymentIssue;
+  // Beyond BMI mode: Stripe's Billing Portal does card, invoices and cancellation; the open invoice is paid on Stripe's page.
+  const live = !!user.backend;
+  const portalButton = (label: string, withIcon = false) =>
+    live ? (
+      <form action={billingPortalAction}>
+        <Button type="submit" variant="secondary" size="sm" iconLeft={withIcon ? <CreditCard className="size-4" /> : undefined}>
+          {label}
+        </Button>
+      </form>
+    ) : (
+      <ButtonLink href="/account/billing?portal=1" variant="secondary" size="sm" iconLeft={withIcon ? <CreditCard className="size-4" /> : undefined}>
+        {label}
+      </ButtonLink>
+    );
   const planStatus: { s: Status; label: string } = overdue ? { s: "paused", label: "Paused — payment due" } : j.state === "consult_done" || j.state === "consult_paid" || j.state === "consult_booked" ? { s: "done", label: "Paid" } : j.state === "ninety_day_completed" ? { s: "done", label: "Completed" } : j.state === "legacy_lapsed" ? { s: "warn", label: "Inactive" } : { s: "done", label: "Active" };
   const totalPlan = plan?.id === "ninety-day-instalments" ? "€450 in total · 3 monthly payments of €150" : plan?.id === "ninety-day-upfront" ? "€399 · one payment, nothing further to pay" : plan?.id === "consult-89" ? "€89 · one payment" : plan ? `${plan.priceLabel} · renews monthly, cancel with 30 days' notice` : "";
 
@@ -34,7 +48,10 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
         <div className="space-y-6">
           {overdue ? (
             <Card tone="warn">
-              <CardHeader title="Pay your missed instalment to resume" sub={`${euro(m.nextChargeAmount ?? 150)} · instalment ${(m.instalmentsPaid ?? 0) + 1} of 3 · unsuccessful since ${fmtDate(m.paymentIssue!.since)}`} />
+              <CardHeader
+                title="Pay your missed instalment to resume"
+                sub={live ? (user.backend?.billingIssue?.amountDue != null ? `${euro(user.backend.billingIssue.amountDue)} due` : undefined) : `${euro(m.nextChargeAmount ?? 150)} · instalment ${(m.instalmentsPaid ?? 0) + 1} of 3 · unsuccessful since ${fmtDate(m.paymentIssue!.since)}`}
+              />
               <p className="text-[14px] text-ink-soft">{m.paymentIssue!.message} While the programme is paused you can&apos;t book or join appointments. Your appointments and your weight history are kept.</p>
               <div className="mt-4 flex flex-wrap gap-2">
                 <form action={payInstalmentAction}>
@@ -42,14 +59,13 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
                     Pay instalment and resume
                   </Button>
                 </form>
-                <ButtonLink variant="secondary" href="/account/billing?portal=1">
-                  Update card
-                </ButtonLink>
+                {portalButton("Update card")}
               </div>
               <p className="mt-3 text-[12px] text-muted">This opens the open invoice — you are never charged twice or asked to start a new plan.</p>
             </Card>
           ) : null}
-          {sp.portal ? <Callout tone="info" title="Card and plan management">In production this opens the secure Stripe customer portal: update your card, download invoices, pause or cancel. In this prototype it is simulated.</Callout> : null}
+          {sp.error === "portal" ? <Callout tone="warn" title="We couldn't open card management just now">Try again in a moment, or call the care team.</Callout> : null}
+          {!live && sp.portal ? <Callout tone="info" title="Card and plan management">In production this opens the secure Stripe customer portal: update your card, download invoices, pause or cancel. In this prototype it is simulated.</Callout> : null}
           {sp.cancel ? (
             <Callout
               tone="notice"
@@ -84,7 +100,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
                   </dd>
                 </div>
               ) : null}
-              {plan?.id === "ninety-day-instalments" ? (
+              {plan?.id === "ninety-day-instalments" && m.instalmentsPaid != null ? (
                 <div>
                   <dt className="text-[12px] font-medium text-muted">Instalments</dt>
                   <dd className="tabular">{m.instalmentsPaid ?? 0} of 3 paid</dd>
@@ -111,12 +127,8 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
               ) : null}
             </dl>
             <div className="mt-5 flex flex-wrap gap-2">
-              <ButtonLink href="/account/billing?portal=1" variant="secondary" size="sm" iconLeft={<CreditCard className="size-4" />}>
-                Update card
-              </ButtonLink>
-              <ButtonLink href="/account/billing?portal=1" variant="secondary" size="sm">
-                Manage plan
-              </ButtonLink>
+              {portalButton("Update card", true)}
+              {portalButton(live ? "Invoices & receipts" : "Manage plan")}
               {m.nextChargeUtc ? (
                 <ButtonLink href="/account/billing?cancel=1" variant="ghost" size="sm">
                   Cancel or pause

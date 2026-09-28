@@ -9,7 +9,7 @@ import { PersonaSwitcher } from "./persona-switcher";
 import { signOutAction } from "@/app/actions";
 import { LogOut } from "lucide-react";
 
-export function AppShell({ user, children, badges, demoUsers, sembleMode, sembleTarget, stages }: { user: PortalPatient; children: ReactNode; badges?: Partial<Record<string, number>>; demoUsers: { userId: string; name: string; state: string; plan?: string }[]; sembleMode: "mock" | "graphql"; sembleTarget: "sandbox" | "production" | "mock"; stages: MemberState[] }) {
+export function AppShell({ user, children, badges, demoUsers, sembleMode, sembleTarget, stages, demoControls }: { user: PortalPatient; children: ReactNode; badges?: Partial<Record<string, number>>; demoUsers: { userId: string; name: string; state: string; plan?: string }[]; sembleMode: "mock" | "graphql"; sembleTarget: "sandbox" | "production" | "mock"; stages: MemberState[]; demoControls: boolean }) {
   return (
     <div className="flex min-h-screen">
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-md focus:bg-paper focus:px-3 focus:py-2 focus:shadow-lift">
@@ -38,7 +38,7 @@ export function AppShell({ user, children, badges, demoUsers, sembleMode, semble
               </button>
             </form>
           </div>
-          <PersonaSwitcher users={demoUsers} currentId={user.userId} currentState={user.membership.state} sembleMode={sembleMode} sembleTarget={sembleTarget} stages={stages} />
+          {demoControls ? <PersonaSwitcher users={demoUsers} currentId={user.userId} currentState={user.membership.state} sembleMode={sembleMode} sembleTarget={sembleTarget} stages={stages} /> : null}
         </div>
       </aside>
 

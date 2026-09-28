@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { AppShell } from "@/components/shell/app-shell";
-import { requireUser } from "@/lib/auth";
+import { authMode, requireUser } from "@/lib/auth";
 import { loadJourney } from "@/lib/portal/journey";
 import { LINKABLE_STAGES, listDemoUsers } from "@/lib/portal/store";
 import { sembleMode, sembleTarget } from "@/lib/semble";
@@ -12,7 +12,7 @@ export default async function PortalLayout({ children }: { children: ReactNode }
   const j = await loadJourney(user);
   const badges = { "/": j.openTasks || undefined };
   return (
-    <AppShell user={user} badges={badges} demoUsers={sembleMode() === "mock" ? listDemoUsers() : []} sembleMode={sembleMode()} sembleTarget={sembleTarget()} stages={LINKABLE_STAGES}>
+    <AppShell user={user} badges={badges} demoUsers={sembleMode() === "mock" ? listDemoUsers() : []} sembleMode={sembleMode()} sembleTarget={sembleTarget()} stages={LINKABLE_STAGES} demoControls={authMode() === "demo"}>
       {children}
     </AppShell>
   );

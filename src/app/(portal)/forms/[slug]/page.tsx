@@ -9,13 +9,60 @@ import { ButtonLink } from "@/components/ui/button";
 import { StatusTag } from "@/components/ui/status-tag";
 import { fmtDateYear, nowMs } from "@/lib/format";
 import { CheckCircle2 } from "lucide-react";
+import type { PortalPatient } from "@/lib/portal/types";
+import { AutoRefresh, TallyEmbed } from "../tally-embed";
 
-export default async function FormPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ done?: string }> }) {
+/** Beyond BMI's Tally forms (answers go to its backend by signed webhook). */
+function tallyForm(user: PortalPatient, slug: string): { src: string; title: string; intro: string; done: boolean } | null {
+  const b = user.backend;
+  if (!b) return null;
+  const base = (process.env.BBMI_TALLY_URL || "https://survey.beyondbmi.ie/").replace(/\/?$/, "/");
+  const pid = `?patient_id=${encodeURIComponent(user.userId)}`;
+  if (slug === "intake") return { src: b.surveyUrl, title: "Health questionnaire", intro: "About 8 minutes. Your doctor reads it before you meet.", done: b.surveyDone };
+  if (slug === "ess-eq5d") return { src: `${base}ess-eq5d${pid}`, title: "Sleep & quality of life", intro: "Two short questionnaires your care team repeats every two months.", done: !b.essDue };
+  if (slug === "health-coach" && b.healthCoachSurvey) return { src: `${base}${b.healthCoachSurvey.slug}${pid}`, title: "Before your health coach session", intro: "A few questions so your coach can prepare.", done: !b.healthCoachSurvey.show };
+  return null;
+}
+
+export default async function FormPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ done?: string; submitted?: string }> }) {
   const { slug } = await params;
   const sp = await searchParams;
+  const user = await requireUser();
+  if (user.backend) {
+    const t = tallyForm(user, slug);
+    if (!t) notFound();
+    if (t.done || sp.submitted) {
+      return (
+        <div className="mx-auto max-w-[640px]">
+          <Card className="text-center">
+            <CheckCircle2 className={`mx-auto size-12 ${t.done ? "text-lime-deep" : "text-muted"}`} />
+            <h1 className="mt-4 text-2xl font-semibold tracking-tight">{t.done ? "Thank you — that's in" : "Saving your answers…"}</h1>
+            <p className="mt-2 text-[15px] text-ink-soft">{t.done ? "Your care team can see your answers now." : "This usually takes a few seconds."}</p>
+            <div className="mt-6 flex flex-col items-center gap-3">
+              {t.done ? (
+                <ButtonLink href={slug === "intake" ? "/" : "/appointments"} size="lg">
+                  Continue
+                </ButtonLink>
+              ) : (
+                <AutoRefresh />
+              )}
+            </div>
+          </Card>
+        </div>
+      );
+    }
+    return (
+      <div className="mx-auto max-w-[760px]">
+        <PageHeader title={t.title} sub={t.intro} />
+        <Card className="!p-2 sm:!p-4">
+          <TallyEmbed src={t.src} title={t.title} />
+        </Card>
+        <p className="mt-4 text-[12px] text-muted">Your answers go straight to your clinical team at Beyond BMI.</p>
+      </div>
+    );
+  }
   const def = FORMS[slug];
   if (!def) notFound();
-  const user = await requireUser();
   const task = def.taskId ? user.onboarding.find((t) => t.id === def.taskId) : undefined;
   const alreadyDone = slug === "intake" && task?.done && !sp.done;
 

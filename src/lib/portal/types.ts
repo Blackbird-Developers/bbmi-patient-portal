@@ -151,6 +151,39 @@ export interface Goal {
   heightCm?: number;
 }
 
+/**
+ * What the Beyond BMI backend says about the patient when the portal runs on it
+ * (PORTAL_AUTH=cognito). Absent in demo mode. Gates read these, never the UI.
+ */
+export interface BackendFacts {
+  /** Cognito groups from the access token: doctor, nurse, dietician, health-coach, prescription, community, survey */
+  groups: string[];
+  canPurchaseConsult: boolean;
+  canUpgrade: boolean;
+  canChooseOngoing: boolean;
+  /** open Stripe invoice to settle — never a fresh checkout */
+  billingIssue?: { status: string; amountDue?: number; currency?: string; payUrl?: string };
+  lapsed?: { status: string; endedAt: string };
+  /** the intake questionnaire (Tally) is in */
+  surveyDone: boolean;
+  /** Tally form to embed for the intake questionnaire */
+  surveyUrl: string;
+  hasAddress: boolean;
+  /** weekly weigh-in is open (none logged in the last 7 days) */
+  weighInOpen: boolean;
+  nextWeighInUtc?: string;
+  essDue: boolean;
+  healthCoachSurvey?: { show: boolean; slug: string };
+  unitPreference: "kg" | "lbs";
+  dob?: string;
+  mobile?: string;
+  /** formatted address on file, if any */
+  address?: string;
+  /** 90-day purchase date (BBMI's counting boundary); programmeStartUtc is the Day-20 anchor */
+  purchaseUtc?: string;
+  doctorReviewDue: boolean;
+}
+
 export interface PortalPatient {
   /** portal user id (our auth) */
   userId: string;
@@ -165,4 +198,6 @@ export interface PortalPatient {
   onboarding: OnboardingTask[];
   /** preferred clinicians for continuity (role → clinician id) */
   careTeam: Partial<Record<ClinicianRole, string>>;
+  /** Beyond BMI backend facts (Cognito mode only) */
+  backend?: BackendFacts;
 }

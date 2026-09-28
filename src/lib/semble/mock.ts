@@ -12,7 +12,7 @@ import {
   clinicianById,
   now,
 } from "./mock-data";
-import { hasRole, type Appointment, type AvailabilitySlot, type DocumentContent, type PatientProfile } from "./types";
+import { hasRole, type Appointment, type AvailabilitySlot, type DocumentContent, type NewPatient, type PatientProfile } from "./types";
 
 /**
  * In-memory Semble. Mutations persist for the life of the dev server so a
@@ -39,6 +39,22 @@ export class MockSembleAdapter implements SembleAdapter {
     await this.latency();
     const e = email.trim().toLowerCase();
     return [...this.patients.values()].find((p) => p.email.toLowerCase() === e) ?? null;
+  }
+
+  async findPatientByNumber(_numberName: string, value: string) {
+    await this.latency();
+    return [...this.patients.values()].find((p) => p.id === value || p.reference === value) ?? null;
+  }
+
+  async setPatientNumber() {
+    await this.latency();
+  }
+
+  async createPatient(input: NewPatient) {
+    await this.latency();
+    const p: PatientProfile = { id: `mock-${++this.seq}`, firstName: input.firstName, lastName: input.lastName, email: input.email, dob: input.dob, phone: input.phone };
+    this.patients.set(p.id, p);
+    return p;
   }
 
   async updatePatientContact(patientId: string, patch: Partial<PatientProfile>) {

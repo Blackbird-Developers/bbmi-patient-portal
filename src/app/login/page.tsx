@@ -1,19 +1,73 @@
 import Image from "next/image";
 import { redirect } from "next/navigation";
-import { allowedEmails, currentUser } from "@/lib/auth";
+import Link from "next/link";
+import { allowedEmails, authMode, currentUser } from "@/lib/auth";
+import { AuthShell } from "@/components/shell/auth-shell";
+import { Callout } from "@/components/ui/callout";
 import { listDemoUsers } from "@/lib/portal/store";
 import { sembleMode, sembleTarget } from "@/lib/semble";
 import { signInAction, switchPersona } from "@/app/actions";
-import { Button } from "@/components/ui/button";
+import { Button, ButtonLink } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 import { STATE_LABEL, type MemberState } from "@/lib/portal/types";
 import { ShieldCheck } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
-  if (await currentUser()) redirect("/");
+const COGNITO_ERRORS: Record<string, string> = {
+  "bad-credentials": "That email and password don't match.",
+  "too-many": "Too many attempts. Wait a few minutes and try again.",
+  unavailable: "Sign-in is unavailable just now. Try again in a moment.",
+  "not-ready": "Your account isn't fully set up yet. Call the care team on +353 1 903 8441 and they'll sort it.",
+};
+
+async function CognitoLogin({ sp }: { sp: { error?: string; reset?: string; verified?: string } }) {
+  return (
+    <AuthShell title="Sign in" lead="Your appointments, treatment and progress in one place.">
+      {sp.reset ? <Callout tone="positive" className="mt-6" title="Password changed">Sign in with your new password.</Callout> : null}
+      {sp.verified ? <Callout tone="positive" className="mt-6" title="Email verified">You can sign in now.</Callout> : null}
+      {sp.error === "not-confirmed" ? (
+        <Callout tone="notice" className="mt-6" title="Verify your email first" action={<ButtonLink href="/verify" size="sm" variant="secondary">Verify email</ButtonLink>}>
+          Use the link we emailed you when you signed up.
+        </Callout>
+      ) : null}
+      {sp.error === "reset-required" ? (
+        <Callout tone="notice" className="mt-6" title="Set a new password" action={<ButtonLink href="/forgot-password" size="sm" variant="secondary">Reset password</ButtonLink>}>
+          For security, this account needs a new password before its first sign-in.
+        </Callout>
+      ) : null}
+      <form action={signInAction} className="mt-8 space-y-4">
+        <Field label="Email address" htmlFor="email" error={sp.error ? COGNITO_ERRORS[sp.error] : undefined}>
+          <Input id="email" name="email" type="email" autoComplete="email" required placeholder="you@example.ie" />
+        </Field>
+        <Field label="Password" htmlFor="password">
+          <Input id="password" name="password" type="password" autoComplete="current-password" required />
+        </Field>
+        <Button type="submit" className="w-full" size="lg">
+          Sign in
+        </Button>
+        <div className="flex justify-between text-[13px]">
+          <Link className="text-blue-text hover:underline" href="/forgot-password">
+            Forgot password?
+          </Link>
+          <a className="text-blue-text hover:underline" href="https://beyondbmi.ie/book-assessment">
+            New here? Book a consultation
+          </a>
+        </div>
+      </form>
+    </AuthShell>
+  );
+}
+
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string; reset?: string; verified?: string }> }) {
   const sp = await searchParams;
+  if (authMode() === "cognito") {
+    // A stale or not-yet-provisioned session must still be able to reach this page.
+    const u = await currentUser().catch(() => null);
+    if (u) redirect("/");
+    return <CognitoLogin sp={sp} />;
+  }
+  if (await currentUser()) redirect("/");
   const mock = sembleMode() === "mock";
   const users = mock ? listDemoUsers() : [];
   // One-click sign-in is a demo convenience: sandbox only, and only when explicitly switched on.

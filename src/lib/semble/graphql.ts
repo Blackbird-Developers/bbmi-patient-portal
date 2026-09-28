@@ -12,6 +12,7 @@ import {
   type ClinicianRole,
   type DocumentContent,
   type Invoice,
+  type NewPatient,
   type PatientDocument,
   type PatientProfile,
   type Prescription,
@@ -312,6 +313,71 @@ export class GraphqlSembleAdapter implements SembleAdapter {
     const hits = [...new Set(d.patients.data.filter((p) => p.email?.trim().toLowerCase() === e).map((p) => p.id))];
     if (hits.length > 1) throw new SembleAdapterError("More than one Semble patient has this email", "upstream");
     return hits[0] ? this.getPatient(hits[0]) : null;
+  }
+
+  async findPatientByNumber(numberName: string, value: string) {
+    // Semble's patient search matches patient numbers; only an exact value on the named number counts.
+    const d = await this.gql<{ patients: { data: { id: string; numbers?: { name?: string | null; value?: string | null }[] | null }[] } }>(
+      `query PatientsByNumber($s: String) { patients(search: $s, pagination:{page:1,pageSize:50}) { data { id numbers { name value } } } }`,
+      { s: value },
+    );
+    const hits = [...new Set(d.patients.data.filter((p) => p.numbers?.some((n) => n.name === numberName && n.value === value)).map((p) => p.id))];
+    if (hits.length > 1) throw new SembleAdapterError(`More than one Semble patient has ${numberName} ${value}`, "upstream");
+    return hits[0] ? this.getPatient(hits[0]) : null;
+  }
+
+  async setPatientNumber(patientId: string, numberName: string, value: string) {
+    const d = await this.gql<{ practice: { practiceNumbers: { id: string; name: string; deleted?: boolean | null }[] | null }; patient: null | { numbers: { id: string; name?: string | null; value?: string | null }[] | null } }>(
+      `query NumberDefs($id: ID!) { practice { practiceNumbers { id name deleted } } patient(id: $id) { numbers { id name value } } }`,
+      { id: patientId },
+    );
+    if (!d.patient) throw new SembleAdapterError("Patient not found", "not-found");
+    const existing = d.patient.numbers?.find((n) => n.name === numberName);
+    if (existing?.value === value) return;
+    if (existing) {
+      const r = await this.gql<{ updatePatientNumber: { data: { id: string } | null; error?: string | null } }>(
+        `mutation UpdateNumber($p: ID!, $n: ID!, $v: String) { updatePatientNumber(patientId: $p, patientNumberId: $n, value: $v) { data { id } error } }`,
+        { p: patientId, n: existing.id, v: value },
+      );
+      if (!r.updatePatientNumber.data) throw new SembleAdapterError(r.updatePatientNumber.error || "Could not update the patient number", "upstream");
+      return;
+    }
+    let def = d.practice.practiceNumbers?.find((n) => n.name === numberName && !n.deleted);
+    if (!def) {
+      const c = await this.gql<{ createPatientNumber: { data: { id: string; name: string } | null; error?: string | null } }>(
+        `mutation CreateNumberDef($i: CreatePatientNumberInput!) { createPatientNumber(input: $i) { data { id name } error } }`,
+        { i: { name: numberName, primary: false, idType: "USER" } },
+      );
+      if (!c.createPatientNumber.data) throw new SembleAdapterError(c.createPatientNumber.error || "Could not create the patient number", "upstream");
+      def = c.createPatientNumber.data;
+    }
+    const a = await this.gql<{ addPatientNumber: { data: { id: string } | null; error?: string | null } }>(
+      `mutation AddNumber($p: ID!, $n: AddPatientNumberData!) { addPatientNumber(patientId: $p, patientNumber: $n) { data { id } error } }`,
+      { p: patientId, n: { numberId: def.id, value } },
+    );
+    if (!a.addPatientNumber.data) throw new SembleAdapterError(a.addPatientNumber.error || "Could not add the patient number", "upstream");
+  }
+
+  async createPatient(input: NewPatient): Promise<PatientProfile> {
+    const d = await this.gql<{ createPatient: { data: { id: string } | null; error?: string | null } }>(
+      `mutation CreatePatient($p: CreatePatientDataInput) { createPatient(patientData: $p) { data { id } error } }`,
+      {
+        p: {
+          first: input.firstName,
+          last: input.lastName,
+          email: input.email.trim().toLowerCase(),
+          ...(input.dob ? { dob: input.dob } : {}),
+          ...(input.gender ? { gender: input.gender } : {}),
+          ...(input.phone ? { phoneType: "Mobile", phoneNumber: input.phone } : {}),
+          country: "IE",
+          communicationPreferences: { receiveEmail: true, receiveSMS: false, promotionalMarketing: false },
+        },
+      },
+    );
+    if (!d.createPatient.data) throw new SembleAdapterError(d.createPatient.error || "Could not create the patient in Semble", "upstream");
+    const id = d.createPatient.data.id;
+    for (const [name, value] of Object.entries(input.numbers ?? {})) await this.setPatientNumber(id, name, value);
+    return this.getPatient(id);
   }
 
   async updatePatientContact(patientId: string, patch: Partial<Pick<PatientProfile, "phone" | "address" | "communicationPreferences">>): Promise<PatientProfile> {

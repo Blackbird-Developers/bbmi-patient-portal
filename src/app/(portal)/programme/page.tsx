@@ -174,7 +174,7 @@ function ActiveProgramme({ j }: { j: JourneyView & { programme: NonNullable<Jour
                 <div className="flex items-center justify-between gap-3">
                   <dt className="text-muted">Instalment {(m.instalmentsPaid ?? 0) + 1} of 3</dt>
                   <dd>
-                    <StatusTag status="warn">Unsuccessful since {fmtDate(m.paymentIssue.since)}</StatusTag>
+                    <StatusTag status="warn">{m.paymentIssue.since ? `Unsuccessful since ${fmtDate(m.paymentIssue.since)}` : "Payment unsuccessful"}</StatusTag>
                   </dd>
                 </div>
               ) : m.nextChargeUtc && m.nextChargeAmount ? (

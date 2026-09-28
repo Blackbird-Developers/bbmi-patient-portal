@@ -10,6 +10,7 @@ import { ButtonLink } from "@/components/ui/button";
 import { StatusTag } from "@/components/ui/status-tag";
 import { clinicianDisplay, euro, fmtDate, fmtDateTime, ROLE_LABEL } from "@/lib/format";
 import { hasRole } from "@/lib/semble/types";
+import { bookingGate } from "@/lib/portal/gates";
 import { SlotPicker, type PickerClinician, type PickerType } from "./slot-picker";
 import { Lock } from "lucide-react";
 
@@ -44,6 +45,11 @@ export default async function BookPage({ params, searchParams }: { params: Promi
   else if (step && step.status === "completed") locked = { title: "Already done", body: `${step.title} is complete.`, href: "/programme", label: "Your programme" };
   else if (step && step.status === "locked") locked = { title: "Not yet", body: `${step.title} opens from ${fmtDate(step.windowFromUtc!)}${step.after?.length ? `, once your earlier ${ROLE_LABEL[step.role].toLowerCase()} appointment is booked` : ""}.`, href: "/programme", label: "Your programme" };
   else if (j.programme?.locked) locked = { title: "Booking is paused", body: j.bookingLockedReason ?? "Pay your missed instalment to resume.", href: "/account/billing", label: "Billing" };
+  if (!locked) {
+    // Beyond BMI rules (survey, weight, plan groups, one appointment per role) — the same check the booking action runs.
+    const gate = bookingGate(user, j.upcoming, type, reschedule?.id);
+    if (!gate.ok) locked = gate;
+  }
 
   /* ---------- range ---------- */
   const now = new Date();

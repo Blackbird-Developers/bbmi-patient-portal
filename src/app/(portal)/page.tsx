@@ -40,7 +40,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
 
         {j.state === "ninety_day_overdue" && m.paymentIssue ? (
           <Card tone="warn">
-            <CardHeader title="Pay your missed instalment to resume" sub={`${euro(m.nextChargeAmount ?? 150)} · instalment ${(m.instalmentsPaid ?? 0) + 1} of 3 · unsuccessful since ${fmtDate(m.paymentIssue.since)}`} />
+            <CardHeader title="Pay your missed instalment to resume" sub={m.paymentIssue.since ? `${euro(m.nextChargeAmount ?? 150)} · instalment ${(m.instalmentsPaid ?? 0) + 1} of 3 · unsuccessful since ${fmtDate(m.paymentIssue.since)}` : user.backend?.billingIssue?.amountDue != null ? `${euro(user.backend.billingIssue.amountDue)} due` : undefined} />
             <p className="text-[14px] text-ink-soft">While the programme is paused you can&apos;t book or join appointments. Your appointments and your weight history are kept.</p>
             <div className="mt-4 flex flex-wrap gap-2">
               <form action={payInstalmentAction}>

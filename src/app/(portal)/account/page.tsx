@@ -14,7 +14,7 @@ import { fmtDateYear } from "@/lib/format";
 import Link from "next/link";
 import { CreditCard, FileText, Download, ShieldCheck, LogOut } from "lucide-react";
 
-export default async function AccountPage({ searchParams }: { searchParams: Promise<{ saved?: string; verify?: string }> }) {
+export default async function AccountPage({ searchParams }: { searchParams: Promise<{ saved?: string; verify?: string; error?: string }> }) {
   const sp = await searchParams;
   const user = await requireUser();
   const p = await getSemble().getPatient(user.semblePatientId);
@@ -27,6 +27,9 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
         <div className="space-y-6">
           {sp.saved === "1" ? <Callout tone="positive" title="Contact details saved">Your clinical record has been updated too.</Callout> : null}
           {sp.saved === "prefs" ? <Callout tone="positive" title="Preferences saved" /> : null}
+          {sp.error === "contact" || sp.error === "prefs" ? (
+            <Callout tone="warn" title="We couldn't save that just now">Nothing was changed. Try again in a moment, or call the care team if it keeps happening.</Callout>
+          ) : null}
           {sp.verify ? (
             <Callout tone="info" title="Identity check">
               A quick photo-ID check (passport or driving licence, plus a selfie) is required before any prescription can be issued. It takes about 2 minutes and opens in a secure window. In this prototype the check is simulated.

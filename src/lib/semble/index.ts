@@ -22,5 +22,11 @@ export function sembleMode(): "mock" | "graphql" {
   return process.env.SEMBLE_ADAPTER === "graphql" ? "graphql" : "mock";
 }
 
+/** Which Semble the portal is talking to — shown on demo controls so nobody mistakes a sandbox for production. */
+export function sembleTarget(): "sandbox" | "production" | "mock" {
+  if (sembleMode() === "mock") return "mock";
+  return /sandbox/i.test(process.env.SEMBLE_GRAPHQL_URL ?? "") ? "sandbox" : "production";
+}
+
 export type { SembleAdapter } from "./adapter";
 export { SembleAdapterError } from "./adapter";

@@ -1,7 +1,7 @@
 import { requireUser } from "@/lib/auth";
 import { loadJourney } from "@/lib/portal/journey";
 import { getSemble } from "@/lib/semble";
-import type { Clinician } from "@/lib/semble/types";
+import { hasRole, type Clinician } from "@/lib/semble/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
@@ -67,7 +67,7 @@ export default async function CarePage() {
   const j = await loadJourney(user);
 
   const matched = j.careTeam.length > 0;
-  const roster: Clinician[] = matched ? [] : (await getSemble().listClinicians()).filter((c) => c.role === "doctor");
+  const roster: Clinician[] = matched ? [] : (await getSemble().listClinicians()).filter((c) => hasRole(c, "doctor"));
   const team = matched ? j.careTeam : roster;
 
   const teamTitle = matched ? "Your clinicians" : "Your doctors";

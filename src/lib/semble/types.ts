@@ -7,13 +7,8 @@
  * Everything time-related is a true UTC ISO string at this boundary.
  */
 
-export type ClinicianRole =
-  | "doctor"
-  | "nurse"
-  | "dietitian"
-  | "health-coach"
-  | "psychologist"
-  | "care-coordinator";
+export const CLINICIAN_ROLES = ["doctor", "nurse", "dietitian", "health-coach", "psychologist", "care-coordinator"] as const;
+export type ClinicianRole = (typeof CLINICIAN_ROLES)[number];
 
 export interface Clinician {
   /** Semble User.id */
@@ -22,13 +17,19 @@ export interface Clinician {
   lastName: string;
   fullName: string;
   title?: string; // "Dr", "RGN", "RD"
+  /** primary role — what the patient sees on cards */
   role: ClinicianRole;
+  /** every role this clinician can be booked for; defaults to [role] */
+  roles?: ClinicianRole[];
   /** e.g. "Obesity medicine", "Registered dietitian" */
   specialty?: string;
   registration?: string; // IMC / NMBI / CORU number — shown on letters
   avatarUrl?: string;
   bio?: string;
 }
+
+/** Can this clinician be booked for appointments of this role? */
+export const hasRole = (c: Clinician, role: ClinicianRole) => (c.roles ?? [c.role]).includes(role);
 
 export interface PatientProfile {
   /** Semble Patient.id (24-hex ObjectId) — never shown to the patient */
@@ -155,6 +156,15 @@ export interface PatientDocument {
   downloadable: boolean;
   summary?: string;
 }
+
+/**
+ * What opening a document yields. `url` is either a same-origin demo link or
+ * an external short-lived Semble URL that the portal must stream server-side
+ * (external: true) so it never reaches the browser; `html` is a letter body.
+ */
+export type DocumentContent =
+  | { kind: "url"; url: string; filename?: string; external: boolean }
+  | { kind: "html"; title: string; html: string };
 
 export type InvoiceStatus = "paid" | "unpaid" | "refunded" | "void";
 

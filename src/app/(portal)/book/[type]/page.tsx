@@ -9,6 +9,7 @@ import { Callout } from "@/components/ui/callout";
 import { ButtonLink } from "@/components/ui/button";
 import { StatusTag } from "@/components/ui/status-tag";
 import { clinicianDisplay, euro, fmtDate, fmtDateTime, ROLE_LABEL } from "@/lib/format";
+import { hasRole } from "@/lib/semble/types";
 import { SlotPicker, type PickerClinician, type PickerType } from "./slot-picker";
 import { Lock } from "lucide-react";
 
@@ -56,17 +57,19 @@ export default async function BookPage({ params, searchParams }: { params: Promi
   let rangeEnd = new Date(earliest.getTime() + RANGE_DAYS * DAY);
   let windowNote: string | undefined;
   let nextRangeHref: string | undefined = `/book/${slug}?${new URLSearchParams({ ...(sp.step ? { step: sp.step } : {}), ...(sp.reschedule ? { reschedule: sp.reschedule } : {}), date: new Date(rangeEnd).toISOString().slice(0, 10) }).toString()}`;
-  if (step?.windowToUtc) {
-    const cap = utcMidnight(step.windowToUtc);
+  // A missed step's window has already closed; it can be rebooked up to the end of the programme instead.
+  const capUtc = step?.status === "missed" ? j.programme?.endUtc : step?.windowToUtc;
+  if (capUtc) {
+    const cap = utcMidnight(capUtc);
     if (cap.getTime() < rangeEnd.getTime()) {
       rangeEnd = new Date(cap.getTime() + DAY);
       nextRangeHref = undefined;
-      windowNote = `Your window for this appointment closes ${fmtDate(step.windowToUtc)}`;
+      windowNote = step?.status === "missed" ? `Rebook before your programme ends on ${fmtDate(capUtc)}` : `Your window for this appointment closes ${fmtDate(capUtc)}`;
     }
   }
 
   /* ---------- data for the picker ---------- */
-  const roleClinicians = allClinicians.filter((c) => c.role === type.role);
+  const roleClinicians = allClinicians.filter((c) => hasRole(c, type.role));
   const usualId = user.careTeam[type.role];
   const clinicians: PickerClinician[] = roleClinicians.map((c) => ({ id: c.id, firstName: c.firstName, lastName: c.lastName, display: clinicianDisplay(c), isCareTeam: c.id === usualId }));
   const slots = locked ? [] : await semble.getAvailability({ appointmentTypeId: type.id, fromUtc: earliest.toISOString(), toUtc: rangeEnd.toISOString() });
@@ -94,6 +97,11 @@ export default async function BookPage({ params, searchParams }: { params: Promi
       {sp.error === "taken" ? (
         <Callout tone="warn" title="That time was just taken" className="mb-6">
           Pick another time — the list below is up to date.
+        </Callout>
+      ) : null}
+      {sp.error === "unavailable" ? (
+        <Callout tone="warn" title="We couldn't book that online" className="mb-6">
+          Nothing was booked. Try another time, or call the care team on +353 1 903 8441 and they will book it for you.
         </Callout>
       ) : null}
 

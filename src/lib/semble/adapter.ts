@@ -5,6 +5,7 @@ import type {
   AvailabilitySlot,
   BookingRequest,
   Clinician,
+  DocumentContent,
   Invoice,
   PatientDocument,
   PatientProfile,
@@ -61,7 +62,8 @@ export interface SembleAdapter {
   /** Mints a short-lived download URL (Semble: 15 min). Never cached. */
   getPrescriptionPdfUrl(patientId: string, prescriptionId: string): Promise<string | null>;
   listDocuments(patientId: string): Promise<PatientDocument[]>;
-  getDocumentUrl(patientId: string, documentId: string): Promise<string | null>;
+  /** Only documents shared with this patient open; external URLs are streamed by the portal, never handed to the browser. */
+  openDocument(patientId: string, documentId: string): Promise<DocumentContent | null>;
   listInvoices(patientId: string): Promise<Invoice[]>;
   listQuestionnaires(patientId: string): Promise<QuestionnaireSummary[]>;
 

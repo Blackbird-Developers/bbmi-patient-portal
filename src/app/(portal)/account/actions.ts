@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
-import { getSemble } from "@/lib/semble";
+import { getSemble, SembleAdapterError } from "@/lib/semble";
 
 export async function updateContactAction(formData: FormData) {
   const u = await requireUser();
@@ -16,20 +16,30 @@ export async function updateContactAction(formData: FormData) {
     postcode: String(formData.get("postcode") ?? "").trim() || undefined,
     country: "Ireland",
   };
-  await getSemble().updatePatientContact(u.semblePatientId, { phone, address });
+  try {
+    await getSemble().updatePatientContact(u.semblePatientId, { phone, address });
+  } catch (e) {
+    if (e instanceof SembleAdapterError) redirect("/account?error=contact");
+    throw e;
+  }
   revalidatePath("/account");
   redirect("/account?saved=1");
 }
 
 export async function updatePreferencesAction(formData: FormData) {
   const u = await requireUser();
-  await getSemble().updatePatientContact(u.semblePatientId, {
-    communicationPreferences: {
-      receiveEmail: formData.get("receiveEmail") === "on",
-      receiveSMS: formData.get("receiveSMS") === "on",
-      promotionalMarketing: formData.get("promotionalMarketing") === "on",
-    },
-  });
+  try {
+    await getSemble().updatePatientContact(u.semblePatientId, {
+      communicationPreferences: {
+        receiveEmail: formData.get("receiveEmail") === "on",
+        receiveSMS: formData.get("receiveSMS") === "on",
+        promotionalMarketing: formData.get("promotionalMarketing") === "on",
+      },
+    });
+  } catch (e) {
+    if (e instanceof SembleAdapterError) redirect("/account?error=prefs");
+    throw e;
+  }
   revalidatePath("/account");
   redirect("/account?saved=prefs");
 }

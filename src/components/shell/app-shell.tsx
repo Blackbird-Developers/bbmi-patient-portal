@@ -2,14 +2,14 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Avatar } from "@/components/ui/avatar";
-import type { PortalPatient } from "@/lib/portal/types";
+import type { MemberState, PortalPatient } from "@/lib/portal/types";
 import { STATE_LABEL } from "@/lib/portal/types";
 import { RailNav, TabBar } from "./nav";
 import { PersonaSwitcher } from "./persona-switcher";
 import { signOutAction } from "@/app/actions";
 import { LogOut } from "lucide-react";
 
-export function AppShell({ user, children, badges, demoUsers, sembleMode }: { user: PortalPatient; children: ReactNode; badges?: Partial<Record<string, number>>; demoUsers: { userId: string; name: string; state: string; plan?: string }[]; sembleMode: "mock" | "graphql" }) {
+export function AppShell({ user, children, badges, demoUsers, sembleMode, sembleTarget, stages }: { user: PortalPatient; children: ReactNode; badges?: Partial<Record<string, number>>; demoUsers: { userId: string; name: string; state: string; plan?: string }[]; sembleMode: "mock" | "graphql"; sembleTarget: "sandbox" | "production" | "mock"; stages: MemberState[] }) {
   return (
     <div className="flex min-h-screen">
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-md focus:bg-paper focus:px-3 focus:py-2 focus:shadow-lift">
@@ -38,7 +38,7 @@ export function AppShell({ user, children, badges, demoUsers, sembleMode }: { us
               </button>
             </form>
           </div>
-          <PersonaSwitcher users={demoUsers} currentId={user.userId} sembleMode={sembleMode} />
+          <PersonaSwitcher users={demoUsers} currentId={user.userId} currentState={user.membership.state} sembleMode={sembleMode} sembleTarget={sembleTarget} stages={stages} />
         </div>
       </aside>
 

@@ -61,7 +61,7 @@ function emptyUpcomingCopy(j: JourneyView): { title: string; body: string } {
 
 /* ---------------------------------------------------------------- page */
 
-export default async function AppointmentsPage({ searchParams }: { searchParams: Promise<{ booked?: string; cancelled?: string; rescheduled?: string }> }) {
+export default async function AppointmentsPage({ searchParams }: { searchParams: Promise<{ booked?: string; cancelled?: string; rescheduled?: string; error?: string }> }) {
   const sp = await searchParams;
   const user = await requireUser();
   const j = await loadJourney(user);
@@ -102,6 +102,11 @@ export default async function AppointmentsPage({ searchParams }: { searchParams:
             </Callout>
           ) : sp.booked ? (
             <Callout tone="positive" title="Appointment booked">A confirmation and the video link are on their way by email.</Callout>
+          ) : null}
+          {sp.error === "cancel" ? (
+            <Callout tone="warn" title="We couldn't cancel that online">
+              Your appointment is still booked. Call the care team on +353 1 903 8441 and they will cancel it for you.
+            </Callout>
           ) : null}
           {sp.cancelled ? (
             <Callout tone="info" title="Appointment cancelled">

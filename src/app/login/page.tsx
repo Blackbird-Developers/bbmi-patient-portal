@@ -1,8 +1,8 @@
 import Image from "next/image";
 import { redirect } from "next/navigation";
-import { currentUser } from "@/lib/auth";
+import { allowedEmails, currentUser } from "@/lib/auth";
 import { listDemoUsers } from "@/lib/portal/store";
-import { sembleMode } from "@/lib/semble";
+import { sembleMode, sembleTarget } from "@/lib/semble";
 import { signInAction, switchPersona } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
@@ -14,8 +14,9 @@ export const dynamic = "force-dynamic";
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string; email?: string }> }) {
   if (await currentUser()) redirect("/");
   const sp = await searchParams;
-  const users = listDemoUsers();
   const mock = sembleMode() === "mock";
+  const users = mock ? listDemoUsers() : [];
+  const linkable = mock ? [] : allowedEmails();
   return (
     <div className="grid min-h-screen lg:grid-cols-[1fr_1.1fr]">
       <div className="flex flex-col justify-center px-6 py-10 sm:px-12 lg:px-16">
@@ -28,10 +29,10 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <p className="mt-1 text-[15px] text-ink-soft">Your appointments, treatment and progress in one place.</p>
 
           <form action={signInAction} className="mt-8 space-y-4">
-            <Field label="Email address" htmlFor="email" error={sp.error === "unknown" ? "We couldn't find an account with that email." : undefined}>
+            <Field label="Email address" htmlFor="email" error={sp.error === "unknown" ? (mock ? "We couldn't find an account with that email." : "That email isn't enabled for this prototype, or no Semble patient has it.") : undefined}>
               <Input id="email" name="email" type="email" autoComplete="email" required defaultValue={sp.email ?? ""} placeholder="you@example.ie" />
             </Field>
-            <Field label="Password" htmlFor="password" hint={mock ? "Demo mode — any password works." : undefined}>
+            <Field label="Password" htmlFor="password" hint={mock ? "Demo mode — any password works." : "Prototype — passwords are not checked yet."}>
               <Input id="password" name="password" type="password" autoComplete="current-password" placeholder="••••••••" />
             </Field>
             <Button type="submit" className="w-full" size="lg">
@@ -59,7 +60,23 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
                 ))}
               </form>
             </div>
-          ) : null}
+          ) : (
+            <div className="mt-10 rounded-lg border border-divider bg-paper-soft p-4">
+              <div className="eyebrow mb-1">Connected to Semble {sembleTarget()}</div>
+              <p className="mb-2 text-[12.5px] text-ink-soft">Signs in as the Semble patient with this email. Appointments, prescriptions and documents are live Semble data.</p>
+              <div className="grid gap-1">
+                {linkable.map((email) => (
+                  <form key={email} action={signInAction}>
+                    <input type="hidden" name="email" value={email} />
+                    <button className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-[13px] hover:bg-blue-soft">
+                      <span className="font-medium text-ink">{email}</span>
+                      <span className="text-[12px] text-muted">Sign in</span>
+                    </button>
+                  </form>
+                ))}
+              </div>
+            </div>
+          )}
 
           <p className="mt-8 flex items-center gap-2 text-[12px] text-muted">
             <ShieldCheck className="size-4 text-blue-text" /> Encrypted, EU-hosted. Privamed Ltd t/a BeyondBMI.

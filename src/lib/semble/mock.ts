@@ -12,7 +12,7 @@ import {
   clinicianById,
   now,
 } from "./mock-data";
-import type { Appointment, AvailabilitySlot, PatientProfile } from "./types";
+import { hasRole, type Appointment, type AvailabilitySlot, type DocumentContent, type PatientProfile } from "./types";
 
 /**
  * In-memory Semble. Mutations persist for the life of the dev server so a
@@ -81,7 +81,7 @@ export class MockSembleAdapter implements SembleAdapter {
     await this.latency();
     const type = APPOINTMENT_TYPES.find((t) => t.id === q.appointmentTypeId);
     if (!type) throw new SembleAdapterError("Unknown appointment type", "not-found");
-    const clinicians = CLINICIANS.filter((c) => c.role === type.role && (!q.clinicianId || c.id === q.clinicianId));
+    const clinicians = CLINICIANS.filter((c) => hasRole(c, type.role) && (!q.clinicianId || c.id === q.clinicianId));
     const out: AvailabilitySlot[] = [];
     const taken = new Set(
       [...this.appts.values()].flat().filter((a) => a.status === "confirmed").map((a) => `${a.clinician.id}|${a.startUtc}`),
@@ -175,10 +175,10 @@ export class MockSembleAdapter implements SembleAdapter {
     return (DOCUMENTS[patientId] ?? []).slice().sort((a, b) => b.createdAtUtc.localeCompare(a.createdAtUtc));
   }
 
-  async getDocumentUrl(patientId: string, documentId: string) {
+  async openDocument(patientId: string, documentId: string): Promise<DocumentContent | null> {
     await this.latency();
     const d = (DOCUMENTS[patientId] ?? []).find((x) => x.id === documentId);
-    return d ? `/api/demo/pdf?kind=document&id=${documentId}` : null;
+    return d?.downloadable ? { kind: "url", url: `/api/demo/pdf?kind=document&id=${documentId}`, external: false } : null;
   }
 
   async listInvoices(patientId: string) {

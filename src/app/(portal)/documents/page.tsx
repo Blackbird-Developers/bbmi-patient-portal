@@ -69,7 +69,7 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
                       {d.summary ? <p className="mt-1 text-[13px] text-ink-soft">{d.summary}</p> : null}
                     </div>
                     {d.downloadable ? (
-                      <a href={`/api/demo/pdf?kind=document&id=${d.id}`} target="_blank" rel="noreferrer" className="inline-flex min-h-10 shrink-0 items-center rounded-full border border-divider bg-paper px-3.5 text-[13px] font-medium text-ink hover:border-blue hover:bg-blue-wash">
+                      <a href={`/api/documents/${d.id}`} target="_blank" rel="noreferrer" className="inline-flex min-h-10 shrink-0 items-center rounded-full border border-divider bg-paper px-3.5 text-[13px] font-medium text-ink hover:border-blue hover:bg-blue-wash">
                         Open
                       </a>
                     ) : null}

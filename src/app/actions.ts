@@ -2,13 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireUser, signIn, signInAs, signOut } from "@/lib/auth";
+import { requireUser, signIn, signInAs, signOut, switchStage } from "@/lib/auth";
 import { getSemble, SembleAdapterError } from "@/lib/semble";
 import { addWeight, completeTask, continueToOngoing, markConsultBooked, markQuestionnaireDone, setPaymentResolved, upgradeToNinetyDay } from "@/lib/portal/store";
 
 /* ---------------------------------------------------------------- auth */
 export async function signInAction(formData: FormData) {
-  const email = String(formData.get("email") ?? "");
+  const email = String(formData.get("email") ?? "").trim();
   const u = await signIn(email);
   if (!u) redirect(`/login?error=unknown&email=${encodeURIComponent(email)}`);
   redirect("/");
@@ -17,6 +17,12 @@ export async function signInAction(formData: FormData) {
 export async function switchPersona(formData: FormData) {
   const id = String(formData.get("userId") ?? "");
   await signInAs(id);
+  revalidatePath("/", "layout");
+  redirect("/");
+}
+
+export async function switchStageAction(formData: FormData) {
+  await switchStage(String(formData.get("stage") ?? ""));
   revalidatePath("/", "layout");
   redirect("/");
 }
@@ -77,28 +83,42 @@ export async function bookAction(formData: FormData) {
     revalidatePath("/", "layout");
     redirect(`/appointments?booked=${a.id}`);
   } catch (e) {
-    if (e instanceof SembleAdapterError && e.code === "slot-taken") redirect(`/book/${typeSlug}?error=taken`);
+    if (e instanceof SembleAdapterError) redirect(`/book/${typeSlug}?${new URLSearchParams({ ...(programmeStepId ? { step: programmeStepId } : {}), error: e.code === "slot-taken" ? "taken" : "unavailable" })}`);
     throw e;
   }
 }
 
 export async function cancelAppointmentAction(formData: FormData) {
   const u = await requireUser();
-  await getSemble().cancel(u.semblePatientId, String(formData.get("appointmentId")));
+  try {
+    await getSemble().cancel(u.semblePatientId, String(formData.get("appointmentId")));
+  } catch (e) {
+    if (e instanceof SembleAdapterError) redirect("/appointments?error=cancel");
+    throw e;
+  }
   revalidatePath("/", "layout");
   redirect("/appointments?cancelled=1");
 }
 
 export async function rescheduleAction(formData: FormData) {
   const u = await requireUser();
-  const a = await getSemble().reschedule(u.semblePatientId, {
-    appointmentId: String(formData.get("appointmentId")),
-    clinicianId: String(formData.get("clinicianId")),
-    startUtc: String(formData.get("startUtc")),
-    endUtc: String(formData.get("endUtc")),
-  });
+  const appointmentId = String(formData.get("appointmentId"));
+  const typeSlug = String(formData.get("typeSlug") ?? "");
+  let id: string;
+  try {
+    const a = await getSemble().reschedule(u.semblePatientId, {
+      appointmentId,
+      clinicianId: String(formData.get("clinicianId")),
+      startUtc: String(formData.get("startUtc")),
+      endUtc: String(formData.get("endUtc")),
+    });
+    id = a.id;
+  } catch (e) {
+    if (e instanceof SembleAdapterError) redirect(`/book/${typeSlug}?${new URLSearchParams({ reschedule: appointmentId, error: e.code === "slot-taken" ? "taken" : "unavailable" })}`);
+    throw e;
+  }
   revalidatePath("/", "layout");
-  redirect(`/appointments?rescheduled=${a.id}`);
+  redirect(`/appointments?rescheduled=${id}`);
 }
 
 /* ---------------------------------------------------------------- plans / billing (Stripe in production) */

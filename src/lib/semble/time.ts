@@ -39,6 +39,13 @@ export function fromPracticeLocalIso(fakeZ: string): string {
   return real.toISOString();
 }
 
+/** Semble LocalDateTime ("2026-09-29T09:00:00", no zone) → true UTC ISO. Never let `new Date()` read it as machine-local. */
+export function fromPracticeLocalNaive(local: string): string {
+  const m = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)/.exec(local);
+  if (!m) throw new Error(`Unexpected Semble local time: ${local}`);
+  return fromPracticeLocalIso(`${m[1]}Z`);
+}
+
 /** True UTC ISO → the Dublin wall-clock string Semble expects (with a fake Z). */
 export function toPracticeLocalIso(trueUtcIso: string): string {
   const real = new Date(trueUtcIso);

@@ -1,6 +1,6 @@
 import "server-only";
 import { daysFromNow } from "../semble/mock-data";
-import type { Membership, OnboardingTask, Plan, PlanId, PortalPatient, WeightEntry } from "./types";
+import type { MemberState, Membership, OnboardingTask, Plan, PlanId, PortalPatient, WeightEntry } from "./types";
 
 /**
  * Portal-owned data store (demo: in-memory; production: Postgres/RDS in
@@ -222,6 +222,31 @@ export function getPortalPatient(userId: string): PortalPatient | null {
 export function findUserByEmail(email: string): PortalPatient | null {
   const e = email.trim().toLowerCase();
   return [...store().values()].find((p) => p.email.toLowerCase() === e) ?? null;
+}
+
+/**
+ * Semble mode: a REAL Semble patient, shown at one of the demo journey stages.
+ * Semble holds the clinical record (profile, clinicians, bookings, prescriptions,
+ * documents, invoices); the stage, plan, weights and tasks come from the template
+ * of the demo patient at that stage, because the portal's own database and Stripe
+ * are not built yet.
+ */
+export const LINKABLE_STAGES: MemberState[] = PORTAL_PATIENTS.map((p) => p.membership.state);
+
+export function linkSemblePatient(profile: { id: string; email: string; firstName: string; lastName: string }, stage: MemberState, careTeam: PortalPatient["careTeam"]): PortalPatient {
+  const template = PORTAL_PATIENTS.find((p) => p.membership.state === stage) ?? PORTAL_PATIENTS[0];
+  const p: PortalPatient = {
+    ...structuredClone(template),
+    userId: `semble:${profile.id}`,
+    semblePatientId: profile.id,
+    email: profile.email,
+    firstName: profile.firstName,
+    lastName: profile.lastName,
+    // Before the consultation there is no care team yet; afterwards it is whoever Semble has for each role.
+    careTeam: template.membership.state === "consult_paid" ? {} : careTeam,
+  };
+  store().set(p.userId, p);
+  return p;
 }
 
 export function listDemoUsers() {

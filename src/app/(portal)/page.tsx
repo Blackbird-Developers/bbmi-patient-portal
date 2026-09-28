@@ -110,8 +110,10 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
               <Package className="size-4 text-blue-text" />
               {rx.fulfilment?.method === "home-delivery" ? (
                 <span>{rx.fulfilment.dispatchedAtUtc ? `Dispatched by ${rx.fulfilment.pharmacyName} ${relativeDay(rx.fulfilment.dispatchedAtUtc)}` : `${rx.fulfilment.pharmacyName} will dispatch within 2 working days`}</span>
-              ) : (
+              ) : rx.status === "sent" ? (
                 <span>Sent to {rx.fulfilment?.pharmacyName ?? "your pharmacy"}</span>
+              ) : (
+                <span>With your doctor — we&apos;ll tell you when it goes to the pharmacy</span>
               )}
             </div>
             {rx.reviewDueUtc ? (

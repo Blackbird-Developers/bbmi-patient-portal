@@ -180,8 +180,19 @@ export function buildProgrammeView(
   if (!start) return [];
   const now = new Date(nowUtc).getTime();
   const byStep = new Map<string, Appointment>();
-  for (const a of appointments) {
-    if (a.programmeStepId && a.status !== "cancelled") byStep.set(a.programmeStepId, a);
+  const live = appointments.filter((a) => a.status !== "cancelled");
+  for (const a of live) {
+    if (a.programmeStepId) byStep.set(a.programmeStepId, a);
+  }
+  // Bookings without a step link (made by the care team in Semble, or whose link failed to save) still count:
+  // each fills the earliest open step of the same appointment type, in date order, from the programme start on.
+  const startMs = new Date(start).getTime() - 14 * DAY_MS;
+  const unlinked = live
+    .filter((a) => !a.programmeStepId && new Date(a.startUtc).getTime() >= startMs)
+    .sort((a, b) => a.startUtc.localeCompare(b.startUtc));
+  for (const a of unlinked) {
+    const step = NINETY_DAY_STEPS.find((s) => s.appointmentTypeSlug === a.type.slug && !byStep.has(s.id));
+    if (step) byStep.set(step.id, a);
   }
 
   return NINETY_DAY_STEPS.map((step) => {
@@ -198,7 +209,8 @@ export function buildProgrammeView(
       const prereqsBooked = (step.after ?? []).every((id) => byStep.has(id));
       const windowOpen = now >= new Date(windowFromUtc).getTime() - 14 * DAY_MS; // can book 2 weeks ahead of the window
       status = prereqsBooked && windowOpen ? "book-now" : "locked";
-      if (now > new Date(windowToUtc).getTime() && !appt) status = "missed";
+      // Missed only once it could have been booked; until its prerequisite is booked it stays locked.
+      if (prereqsBooked && now > new Date(windowToUtc).getTime()) status = "missed";
     }
     return {
       ...step,

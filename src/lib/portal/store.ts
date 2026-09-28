@@ -234,7 +234,9 @@ export function findUserByEmail(email: string): PortalPatient | null {
 export const LINKABLE_STAGES: MemberState[] = PORTAL_PATIENTS.map((p) => p.membership.state);
 
 export function linkSemblePatient(profile: { id: string; email: string; firstName: string; lastName: string }, stage: MemberState, careTeam: PortalPatient["careTeam"]): PortalPatient {
-  const template = PORTAL_PATIENTS.find((p) => p.membership.state === stage) ?? PORTAL_PATIENTS[0];
+  // "Consultation booked" has no demo patient of its own: it is the consult_paid journey one step on.
+  const booked = stage === "consult_booked";
+  const template = PORTAL_PATIENTS.find((p) => p.membership.state === (booked ? "consult_paid" : stage)) ?? PORTAL_PATIENTS[0];
   const p: PortalPatient = {
     ...structuredClone(template),
     userId: `semble:${profile.id}`,
@@ -245,6 +247,10 @@ export function linkSemblePatient(profile: { id: string; email: string; firstNam
     // Before the consultation there is no care team yet; afterwards it is whoever Semble has for each role.
     careTeam: template.membership.state === "consult_paid" ? {} : careTeam,
   };
+  if (booked) {
+    p.membership.state = "consult_booked";
+    for (const t of p.onboarding) if (t.id === "questionnaire" || t.id === "book") t.done = true;
+  }
   store().set(p.userId, p);
   return p;
 }

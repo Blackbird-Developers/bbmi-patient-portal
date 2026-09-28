@@ -6,6 +6,7 @@ import {
   hasRole,
   type Appointment,
   type AppointmentType,
+  type AvailabilityQuery,
   type AvailabilitySlot,
   type Clinician,
   type ClinicianRole,
@@ -20,12 +21,13 @@ import {
 /**
  * Real Semble adapter (GraphQL, header x-token). Production is
  * https://open.semble.io/graphql; the BBMI sandbox practice is
- * https://open.sandbox.semble.io/graphql (set SEMBLE_GRAPHQL_URL).
+ * https://open.sandbox.semble.io/graphql (set SEMBLE_GRAPHQL_URL). Pointing it
+ * at production also needs PORTAL_ALLOW_PRODUCTION=1, which must wait for real
+ * authentication.
  *
  * Every operation validates against the schema of the "Beyond BMI (Sandbox)"
- * practice (introspected 2026-09-28), and the read paths have been run
- * against it. Every rule in ./adapter.ts is implemented HERE, so the UI never
- * sees them.
+ * practice and has been run against it. Every rule in ./adapter.ts is
+ * implemented HERE, so the UI never sees them.
  *
  * Configuration lives in Semble, not in this file:
  *  - Appointment types are Semble products tagged with metadata
@@ -35,6 +37,13 @@ import {
  *    ("doctor" or "nurse,health-coach"). When any clinician carries it, only
  *    tagged clinicians are offered; otherwise every practitioner is, with the
  *    role guessed from their specialties.
+ *  - Rooms: an appointment type is offered in the rooms whose "Services
+ *    provided" include it (Settings → Locations in Semble). SEMBLE_LOCATION_ID
+ *    pins one room instead.
+ *
+ * Time: booking start/end and availability are naive Dublin wall-clock (the
+ * fake-Z convention in ./time.ts); system timestamps such as a prescription's
+ * date or a document's sharedAt are true UTC.
  */
 
 type Meta = { key: string; value: string }[] | null | undefined;
@@ -44,6 +53,7 @@ const asRoles = (v?: string): ClinicianRole[] =>
     .split(",")
     .map((s) => s.trim().toLowerCase())
     .filter((s): s is ClinicianRole => (CLINICIAN_ROLES as readonly string[]).includes(s));
+const trueUtc = (iso: string) => new Date(iso).toISOString();
 
 type RawBooking = {
   id: string;
@@ -53,12 +63,17 @@ type RawBooking = {
   status?: string | null;
   comments?: string | null;
   videoUrl?: string | null;
-  doctor?: { id: string } | null;
-  appointment?: { id: string } | null;
+  doctor?: { id: string; fullName?: string | null } | null;
+  appointment?: { id: string; title?: string | null; duration?: number | null } | null;
   patientId?: string | null;
   metadata?: Meta;
+  bookingJourney?: { dna?: string | null } | null;
 };
-const BOOKING_FIELDS = "id start end deleted status comments videoUrl patientId doctor { id } appointment { id } metadata { key value }";
+const BOOKING_FIELDS = "id start end deleted status comments videoUrl patientId doctor { id fullName } appointment { id title duration } metadata { key value } bookingJourney { dna }";
+
+type Room = { id: string; name: string; services: Set<string> };
+type Window = { clinicianId: string; roomId: string; start: number; end: number };
+type Reference = { at: number; clinicians: Clinician[]; types: AppointmentType[]; rooms: Room[]; servicesByClinician: Map<string, Set<string>> };
 
 /** Semble stores ISO 3166-1 alpha-2 country codes and rejects anything longer on update. */
 const COUNTRY_CODES: Record<string, string> = { ireland: "IE", "republic of ireland": "IE", "northern ireland": "GB", "united kingdom": "GB", uk: "GB", "great britain": "GB" };
@@ -75,23 +90,40 @@ const fromCountryCode = (c?: string | null) => (c ? (COUNTRY_NAMES[c.toUpperCase
 
 /** Minimum notice for online booking, and the reschedule/cancel cut-off (Terms: 24 h). */
 const LEAD_TIME_MS = 12 * 3_600_000;
+const LEAD_TIME_GRACE_MS = 15 * 60_000; // a slot shown just before the cut-off can still be confirmed
 const CHANGE_CUTOFF_MS = 24 * 3_600_000;
+const MAX_PAGES = 50;
+/** Semble's refusal when a practice is not on the New Appointment System (or the query shape is unknown). */
+const NO_SLOTS_API = /new (semble )?appointment system|not (enabled|available)|cannot query field|unknown argument/i;
 
 export class GraphqlSembleAdapter implements SembleAdapter {
   private url = process.env.SEMBLE_GRAPHQL_URL || "https://open.semble.io/graphql";
   private token = process.env.SEMBLE_API_TOKEN || "";
-  private refCache: { at: number; clinicians: Clinician[]; types: AppointmentType[]; locationId: string } | null = null;
+  private refCache: Reference | null = null;
+  private refInFlight: Promise<Reference> | null = null;
+  /** Remembered once Semble refuses availabilitySlots for this practice. */
+  private legacyAvailability = false;
 
   constructor() {
     if (!this.token) throw new Error("SEMBLE_API_TOKEN is required for SEMBLE_ADAPTER=graphql");
+    if (!/sandbox/i.test(this.url) && process.env.PORTAL_ALLOW_PRODUCTION !== "1")
+      throw new Error("Refusing to connect the prototype to a production Semble practice: it has no real authentication yet. Set PORTAL_ALLOW_PRODUCTION=1 only once it does.");
   }
 
   /**
-   * GraphQL call. Retries Semble's "too often" rate limit (HTTP 200 + error), and
-   * network failures where the connection was never made — safe even for mutations,
-   * because the request never reached Semble. Anything else is not retried.
+   * GraphQL call.
+   *  - Retries Semble's "too often" rate limit (HTTP 200 + error, or 429) — for a
+   *    mutation only when Semble returned no data, i.e. the write did not happen.
+   *  - Retries network failures where the connection was never made (safe even
+   *    for mutations: the request never reached Semble).
+   *  - A mutation that was sent but got no usable answer is "unknown-outcome":
+   *    the change may or may not have happened.
    */
   private async gql<T>(query: string, variables: Record<string, unknown> = {}, attempt = 0): Promise<T> {
+    const isMutation = /^\s*mutation\b/.test(query);
+    const unknown = (cause: unknown) => new SembleAdapterError("Semble did not confirm the change", "unknown-outcome", cause);
+    const retryLater = (ms: number) => new Promise((r) => setTimeout(r, ms + Math.random() * 200));
+
     let res: Response;
     try {
       res = await fetch(this.url, {
@@ -103,22 +135,52 @@ export class GraphqlSembleAdapter implements SembleAdapter {
       });
     } catch (e) {
       const code = (e as { cause?: { code?: string } })?.cause?.code ?? "";
-      if (/UND_ERR_CONNECT_TIMEOUT|ECONNREFUSED|ENOTFOUND|EAI_AGAIN/.test(code) && attempt < 2) {
-        await new Promise((r) => setTimeout(r, 500 * 2 ** attempt));
+      const neverConnected = /UND_ERR_CONNECT_TIMEOUT|ECONNREFUSED|ENOTFOUND|EAI_AGAIN/.test(code);
+      if (neverConnected && attempt < 2) {
+        await retryLater(500 * 2 ** attempt);
         return this.gql<T>(query, variables, attempt + 1);
       }
-      throw new SembleAdapterError("Semble could not be reached", "upstream", e);
+      if (isMutation && !neverConnected) throw unknown(e);
+      throw new SembleAdapterError("Semble could not be reached", "unreachable", e);
+    }
+
+    if (res.status === 429) {
+      if (attempt < 5) {
+        await retryLater(400 * 2 ** attempt);
+        return this.gql<T>(query, variables, attempt + 1);
+      }
+      throw new SembleAdapterError("Semble is busy, try again in a moment", "rate-limited");
+    }
+
+    let json: { data?: T; errors?: { message: string; extensions?: { code?: string } }[] };
+    try {
+      json = await res.json();
+    } catch (e) {
+      // An edge block (e.g. sustained bursts) answers with HTML, not a GraphQL error.
+      if (res.status === 403) throw new SembleAdapterError("Semble is busy, try again in a moment", "rate-limited", e);
+      if (isMutation) throw unknown(e);
+      throw new SembleAdapterError(`Semble returned an unreadable response (HTTP ${res.status})`, "unreachable", e);
     }
     if (res.status === 401 || res.status === 403) throw new SembleAdapterError("Semble rejected the token", "unauthorised");
-    const json = (await res.json()) as { data?: T; errors?: { message: string; extensions?: { code?: string } }[] };
+    if (!res.ok && !json.errors?.length) {
+      if (isMutation) throw unknown(`HTTP ${res.status}`);
+      throw new SembleAdapterError(`Semble returned HTTP ${res.status}`, "unreachable");
+    }
+
     if (json.errors?.length) {
       const msg = json.errors.map((e) => e.message).join("; ");
-      if (isRateLimitMessage(msg) && attempt < 5) {
-        await new Promise((r) => setTimeout(r, 400 * 2 ** attempt + Math.random() * 200));
-        return this.gql<T>(query, variables, attempt + 1);
+      const wrote = !!json.data && Object.values(json.data as Record<string, unknown>).some((v) => v != null);
+      if (isRateLimitMessage(msg)) {
+        if (isMutation && wrote) throw unknown(msg);
+        if (attempt < 5) {
+          await retryLater(400 * 2 ** attempt);
+          return this.gql<T>(query, variables, attempt + 1);
+        }
+        throw new SembleAdapterError("Semble is busy, try again in a moment", "rate-limited");
       }
-      if (isRateLimitMessage(msg)) throw new SembleAdapterError("Semble is busy, try again in a moment", "rate-limited");
       if (json.errors.some((e) => e.extensions?.code === "UNAUTHENTICATED")) throw new SembleAdapterError("Semble rejected the token", "unauthorised");
+      // A write that came back with data but a field-level error still happened.
+      if (isMutation && wrote) throw unknown(msg);
       throw new SembleAdapterError(msg, "upstream");
     }
     if (!json.data) throw new SembleAdapterError("Empty response from Semble", "upstream");
@@ -138,40 +200,47 @@ export class GraphqlSembleAdapter implements SembleAdapter {
     return /diet/i.test(name) ? "dietitian" : /nurse/i.test(name) ? "nurse" : /coach/i.test(name) ? "health-coach" : "doctor";
   }
 
-  private async reference() {
+  private async reference(): Promise<Reference> {
     if (this.refCache && Date.now() - this.refCache.at < 5 * 60_000) return this.refCache;
-    const data = await this.gql<{
-      users: { data: { id: string; firstName: string; lastName: string; fullName: string; title?: string | null; isDoctor?: boolean | null; deleted?: boolean | null; medicalSpecialties?: string[] | null; registration?: string | null; positionTitle?: string | null; metadata?: Meta }[] };
-      products: { data: { id: string; name: string; productType?: string | null; status?: string | null; duration?: number | null; price?: number | null; isBookable?: boolean | null; requiresPayment?: boolean | null; metadata?: Meta }[] };
-      practice: { locations: { id: string; name: string }[] | null };
-    }>(`query Reference {
-          users(pagination:{page:1,pageSize:200}) { data { id firstName lastName fullName title isDoctor deleted medicalSpecialties registration positionTitle metadata { key value } } }
-          products(pagination:{page:1,pageSize:200}) { data { id name productType status duration price isBookable requiresPayment metadata { key value } } }
-          practice { locations { id name } } }`);
+    // One Reference query at a time: concurrent callers on a cold or expired cache share it.
+    this.refInFlight ??= this.loadReference().finally(() => {
+      this.refInFlight = null;
+    });
+    return this.refInFlight;
+  }
 
-    // Availability and booking both need a location. BBMI is one virtual clinic; override with SEMBLE_LOCATION_ID if that changes.
-    const locationId = process.env.SEMBLE_LOCATION_ID || data.practice.locations?.[0]?.id;
-    if (!locationId) throw new SembleAdapterError("Semble practice has no location configured", "upstream");
+  private async loadReference(): Promise<Reference> {
+    const data = await this.gql<{
+      users: { data: { id: string; firstName: string; lastName: string; fullName: string; title?: string | null; isDoctor?: boolean | null; deleted?: boolean | null; medicalSpecialties?: string[] | null; registration?: string | null; positionTitle?: string | null; metadata?: Meta; servicesProvided?: { id: string }[] | null }[] };
+      products: { data: { id: string; name: string; productType?: string | null; status?: string | null; duration?: number | null; price?: number | null; isBookable?: boolean | null; requiresPayment?: boolean | null; metadata?: Meta }[] };
+      practice: { locations: { id: string; name: string; servicesProvided?: { id: string }[] | null }[] | null };
+    }>(`query Reference {
+          users(pagination:{page:1,pageSize:200}) { data { id firstName lastName fullName title isDoctor deleted medicalSpecialties registration positionTitle metadata { key value } servicesProvided { id } } }
+          products(pagination:{page:1,pageSize:200}) { data { id name productType status duration price isBookable requiresPayment metadata { key value } } }
+          practice { locations { id name servicesProvided { id } } } }`);
+
+    const rooms: Room[] = (data.practice.locations ?? []).map((l) => ({ id: l.id, name: l.name, services: new Set((l.servicesProvided ?? []).map((s) => s.id)) }));
 
     // Like products: once any clinician is tagged with portalRoles, only tagged clinicians are offered.
     const practitioners = data.users.data.filter((u) => u.isDoctor && !u.deleted);
     const taggedUsers = practitioners.filter((u) => asRoles(meta(u.metadata, "portalRoles") ?? meta(u.metadata, "portalRole")).length);
-    const clinicians: Clinician[] = (taggedUsers.length ? taggedUsers : practitioners)
-      .map((u) => {
-        const tagged = asRoles(meta(u.metadata, "portalRoles") ?? meta(u.metadata, "portalRole"));
-        const roles = tagged.length ? tagged : [GraphqlSembleAdapter.roleFromUser(u)];
-        return {
-          id: u.id,
-          firstName: u.firstName,
-          lastName: u.lastName,
-          fullName: u.fullName,
-          title: u.title ?? undefined,
-          role: roles[0],
-          roles,
-          specialty: u.positionTitle ?? undefined,
-          registration: u.registration ?? undefined,
-        };
-      });
+    const chosen = taggedUsers.length ? taggedUsers : practitioners;
+    const clinicians: Clinician[] = chosen.map((u) => {
+      const tagged = asRoles(meta(u.metadata, "portalRoles") ?? meta(u.metadata, "portalRole"));
+      const roles = tagged.length ? tagged : [GraphqlSembleAdapter.roleFromUser(u)];
+      return {
+        id: u.id,
+        firstName: u.firstName,
+        lastName: u.lastName,
+        fullName: u.fullName,
+        title: u.title || undefined,
+        role: roles[0],
+        roles,
+        specialty: u.positionTitle || undefined,
+        registration: u.registration || undefined,
+      };
+    });
+    const servicesByClinician = new Map(chosen.map((u) => [u.id, new Set((u.servicesProvided ?? []).map((s) => s.id))]));
 
     const bookable = data.products.data.filter((p) => p.isBookable && p.productType === "appointment" && (!p.status || p.status === "active"));
     const tagged = bookable.filter((p) => meta(p.metadata, "portalSlug"));
@@ -185,8 +254,26 @@ export class GraphqlSembleAdapter implements SembleAdapter {
       requiresPayment: !!p.requiresPayment,
     }));
 
-    this.refCache = { at: Date.now(), clinicians, types, locationId };
+    this.refCache = { at: Date.now(), clinicians, types, rooms, servicesByClinician };
     return this.refCache;
+  }
+
+  /** Rooms where this appointment type can be booked. */
+  private static roomsFor(ref: Reference, typeId: string): string[] {
+    const pinned = process.env.SEMBLE_LOCATION_ID;
+    if (pinned) return [pinned];
+    return ref.rooms.filter((r) => r.services.has(typeId)).map((r) => r.id);
+  }
+
+  /** Clinicians who can be booked for this type: right role, and (when Semble lists their services) they provide it. */
+  private static cliniciansFor(ref: Reference, type: AppointmentType, only?: string): string[] {
+    return ref.clinicians
+      .filter((c) => hasRole(c, type.role) && (!only || c.id === only))
+      .filter((c) => {
+        const services = ref.servicesByClinician.get(c.id);
+        return !services?.size || services.has(type.id);
+      })
+      .map((c) => c.id);
   }
 
   /* ------------------------------------------------------------------ patient */
@@ -219,7 +306,7 @@ export class GraphqlSembleAdapter implements SembleAdapter {
     // patients(search:) is fuzzy — only an EXACT email match counts, and two exact matches is a duplicate we refuse to guess between.
     const e = email.trim().toLowerCase();
     const d = await this.gql<{ patients: { data: { id: string; email?: string | null }[] } }>(
-      `query Patients($s: String) { patients(search: $s, pagination:{page:1,pageSize:20}) { data { id email } } }`,
+      `query Patients($s: String) { patients(search: $s, pagination:{page:1,pageSize:50}) { data { id email } } }`,
       { s: e },
     );
     const hits = [...new Set(d.patients.data.filter((p) => p.email?.trim().toLowerCase() === e).map((p) => p.id))];
@@ -237,31 +324,39 @@ export class GraphqlSembleAdapter implements SembleAdapter {
       patientData.country = toCountryCode(a.country);
     }
     if (patch.communicationPreferences) patientData.communicationPreferences = patch.communicationPreferences;
+    let savedSomething = false;
     if (Object.keys(patientData).length) {
       const d = await this.gql<{ updatePatient: { data: { id: string } | null; error?: string | null } }>(
         `mutation UpdatePatient($id: ID!, $p: UpdatePatientDataInput!) { updatePatient(id: $id, patientData: $p) { data { id } error } }`,
         { id: patientId, p: patientData },
       );
       if (!d.updatePatient.data) throw new SembleAdapterError(d.updatePatient.error || "Could not update your details", "upstream");
+      savedSomething = true;
     }
     if (patch.phone) {
-      const cur = await this.gql<{ patient: null | { phones?: { phoneId: string; phoneType?: string | null; phoneNumber?: string | null }[] | null } }>(
-        `query Phones($id: ID!) { patient(id: $id) { phones { phoneId phoneType phoneNumber } } }`,
-        { id: patientId },
-      );
-      if (!cur.patient) throw new SembleAdapterError("Patient not found", "not-found");
-      const first = cur.patient.phones?.[0];
-      if (first?.phoneNumber !== patch.phone) {
-        const d = first
-          ? await this.gql<{ updatePatientPhoneNumber: { data: { id: string } | null; error?: string | null } }>(
-              `mutation UpdatePhone($id: ID!, $ph: ID!, $n: String!, $t: String) { updatePatientPhoneNumber(patientId: $id, phoneId: $ph, phoneData: { phoneNumber: $n, phoneType: $t }) { data { id } error } }`,
-              { id: patientId, ph: first.phoneId, n: patch.phone, t: first.phoneType ?? "Mobile" },
-            ).then((r) => r.updatePatientPhoneNumber)
-          : await this.gql<{ addPatientPhoneNumber: { data: { id: string } | null; error?: string | null } }>(
-              `mutation AddPhone($id: ID!, $n: String!) { addPatientPhoneNumber(patientId: $id, phoneData: { phoneNumber: $n, phoneType: "Mobile" }) { data { id } error } }`,
-              { id: patientId, n: patch.phone },
-            ).then((r) => r.addPatientPhoneNumber);
-        if (!d.data) throw new SembleAdapterError(d.error || "Could not update your phone number", "upstream");
+      try {
+        const cur = await this.gql<{ patient: null | { phones?: { phoneId: string; phoneType?: string | null; phoneNumber?: string | null }[] | null } }>(
+          `query Phones($id: ID!) { patient(id: $id) { phones { phoneId phoneType phoneNumber } } }`,
+          { id: patientId },
+        );
+        if (!cur.patient) throw new SembleAdapterError("Patient not found", "not-found");
+        const first = cur.patient.phones?.[0];
+        if (first?.phoneNumber !== patch.phone) {
+          const d = first
+            ? await this.gql<{ updatePatientPhoneNumber: { data: { id: string } | null; error?: string | null } }>(
+                `mutation UpdatePhone($id: ID!, $ph: ID!, $n: String!, $t: String) { updatePatientPhoneNumber(patientId: $id, phoneId: $ph, phoneData: { phoneNumber: $n, phoneType: $t }) { data { id } error } }`,
+                { id: patientId, ph: first.phoneId, n: patch.phone, t: first.phoneType ?? "Mobile" },
+              ).then((r) => r.updatePatientPhoneNumber)
+            : await this.gql<{ addPatientPhoneNumber: { data: { id: string } | null; error?: string | null } }>(
+                `mutation AddPhone($id: ID!, $n: String!) { addPatientPhoneNumber(patientId: $id, phoneData: { phoneNumber: $n, phoneType: "Mobile" }) { data { id } error } }`,
+                { id: patientId, n: patch.phone },
+              ).then((r) => r.addPatientPhoneNumber);
+          if (!d.data) throw new SembleAdapterError(d.error || "Could not update your phone number", "upstream");
+        }
+      } catch (e) {
+        // The address is already saved; say so rather than "nothing changed".
+        if (savedSomething && e instanceof SembleAdapterError) throw new SembleAdapterError("Your address was saved but your phone number was not", "partial", e);
+        throw e;
       }
     }
     return this.getPatient(patientId);
@@ -278,15 +373,16 @@ export class GraphqlSembleAdapter implements SembleAdapter {
 
   /* ------------------------------------------------------------------ appointments */
 
-  private async mapBooking(b: RawBooking): Promise<Appointment> {
-    const ref = await this.reference();
+  private mapBooking(ref: Reference, b: RawBooking): Appointment {
     const startUtc = fromPracticeLocalIso(b.start);
     const endUtc = fromPracticeLocalIso(b.end);
     const doctorId = b.doctor?.id ?? "";
-    const clinician = ref.clinicians.find((c) => c.id === doctorId) ?? { id: doctorId, firstName: "", lastName: "", fullName: "Your clinician", role: "doctor" as const };
+    const clinician = ref.clinicians.find((c) => c.id === doctorId) ?? { id: doctorId, firstName: "", lastName: "", fullName: b.doctor?.fullName || "Your clinician", role: "doctor" as const };
     const typeId = b.appointment?.id ?? "";
-    const type = ref.types.find((t) => t.id === typeId) ?? { id: typeId, name: "Appointment", slug: "appointment", role: clinician.role, durationMinutes: 0, price: 0, requiresPayment: false };
-    const status: Appointment["status"] = b.deleted || b.status === "failed" ? "cancelled" : b.status === "pending" || b.status === "processing" ? "pending" : new Date(endUtc).getTime() < Date.now() ? "completed" : "confirmed";
+    const known = ref.types.find((t) => t.id === typeId);
+    // A booking staff made with a type the portal doesn't offer still shows its real name and length.
+    const type = known ?? { id: typeId, name: b.appointment?.title || "Appointment", slug: "appointment", role: clinician.role, durationMinutes: b.appointment?.duration ?? Math.round((new Date(endUtc).getTime() - new Date(startUtc).getTime()) / 60_000), price: 0, requiresPayment: false };
+    const status: Appointment["status"] = b.deleted || b.status === "failed" ? "cancelled" : b.bookingJourney?.dna ? "no-show" : b.status === "pending" || b.status === "processing" ? "pending" : new Date(endUtc).getTime() < Date.now() ? "completed" : "confirmed";
     const changeable = status === "confirmed" && new Date(startUtc).getTime() > Date.now() + CHANGE_CUTOFF_MS;
     return {
       id: b.id,
@@ -298,81 +394,112 @@ export class GraphqlSembleAdapter implements SembleAdapter {
       videoUrl: b.videoUrl ?? undefined,
       patientNotes: b.comments ?? undefined,
       programmeStepId: meta(b.metadata, "programmeStep"),
-      canReschedule: changeable,
+      // Only types the portal can book can be moved online; the care team moves anything else.
+      canReschedule: changeable && !!known,
       canCancel: changeable,
     };
   }
 
-  async listAppointments(patientId: string, range: { fromUtc: string; toUtc: string }) {
-    // Patient-scoped read: `patient(id){ bookings(start,end) }` — never the practice-wide `bookings(dateRange)`
+  private async rawBookings(patientId: string, fromUtc: string, toUtc: string): Promise<RawBooking[]> {
+    // Patient-scoped read: `patient(id){ bookingsWithPagination }` — never the practice-wide `bookings(dateRange)`
     // (no patientId filter there). Semble matches on booking START; pad 6h back. Dedupe: ~13% duplicate rows.
-    const from = new Date(new Date(range.fromUtc).getTime() - 6 * 3_600_000).toISOString();
-    const d = await this.gql<{ patient: null | { bookings: RawBooking[] } }>(
-      `query PatientBookings($id: ID!, $from: Date!, $to: Date!) { patient(id: $id) { bookings(start: $from, end: $to, queryOptions: { includeDeleted: true }) { ${BOOKING_FIELDS} } } }`,
-      { id: patientId, from: toPracticeLocalIso(from), to: toPracticeLocalIso(range.toUtc) },
-    );
-    const seen = new Map<string, Appointment>();
-    for (const b of d.patient?.bookings ?? []) {
-      if (b.patientId && b.patientId !== patientId) continue;
-      if (!seen.has(b.id)) seen.set(b.id, await this.mapBooking(b));
+    const from = new Date(new Date(fromUtc).getTime() - 6 * 3_600_000).toISOString();
+    const seen = new Map<string, RawBooking>();
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      const d = await this.gql<{ patient: null | { bookingsWithPagination: { data: RawBooking[]; meta?: { hasMore?: boolean | null } | null } } }>(
+        `query PatientBookings($id: ID!, $from: Date!, $to: Date!, $page: Int) { patient(id: $id) { bookingsWithPagination(start: $from, end: $to, queryOptions: { includeDeleted: true }, pagination: { page: $page, pageSize: 100 }) { data { ${BOOKING_FIELDS} } meta { hasMore } } } }`,
+        { id: patientId, from: toPracticeLocalIso(from), to: toPracticeLocalIso(toUtc), page },
+      );
+      const rows = d.patient?.bookingsWithPagination;
+      for (const b of rows?.data ?? []) if ((!b.patientId || b.patientId === patientId) && !seen.has(b.id)) seen.set(b.id, b);
+      if (!rows?.meta?.hasMore) break;
     }
-    return [...seen.values()].sort((a, b) => a.startUtc.localeCompare(b.startUtc));
+    return [...seen.values()];
+  }
+
+  async listAppointments(patientId: string, range: { fromUtc: string; toUtc: string }) {
+    const [ref, rows] = await Promise.all([this.reference(), this.rawBookings(patientId, range.fromUtc, range.toUtc)]);
+    return rows.map((b) => this.mapBooking(ref, b)).sort((a, b) => a.startUtc.localeCompare(b.startUtc));
   }
 
   async getAppointment(patientId: string, appointmentId: string) {
-    const d = await this.gql<{ booking: null | (RawBooking & { patient?: { id: string } | null }) }>(
-      `query Booking($id: ID!) { booking(id: $id) { ${BOOKING_FIELDS} patient { id } } }`,
-      { id: appointmentId },
-    );
+    const [ref, d] = await Promise.all([
+      this.reference(),
+      this.gql<{ booking: null | (RawBooking & { patient?: { id: string } | null }) }>(`query Booking($id: ID!) { booking(id: $id) { ${BOOKING_FIELDS} patient { id } } }`, { id: appointmentId }),
+    ]);
     const b = d.booking;
     if (!b || (b.patient?.id ?? b.patientId) !== patientId) return null;
-    return this.mapBooking(b);
+    return this.mapBooking(ref, b);
   }
 
-  /** Free windows per clinician, as true-UTC intervals. Prefers the New Appointment System's availabilitySlots. */
-  private async freeWindows(clinicianIds: string[], fromUtc: string, toUtc: string, locationId: string): Promise<{ clinicianId: string; start: number; end: number }[]> {
-    const out: { clinicianId: string; start: number; end: number }[] = [];
-    for (const w of chunkDays(fromUtc, toUtc, 7)) {
-      const startDay = toPracticeLocalIso(w.from).slice(0, 10);
-      const endDay = toPracticeLocalIso(w.to).slice(0, 10);
+  /**
+   * Free windows per clinician and room, as true-UTC intervals.
+   * availabilitySlots (New Appointment System) already subtracts bookings and
+   * unavailability; the legacy query is only used when Semble refuses
+   * availabilitySlots for the practice, and then existing bookings are
+   * subtracted here.
+   */
+  private async freeWindows(clinicianIds: string[], roomIds: string[], fromUtc: string, toUtc: string, excludeBookingId?: string): Promise<Window[]> {
+    const chunks = chunkDays(fromUtc, toUtc, 7).map((w) => ({
+      // Dublin calendar days covering the chunk; `end` is exclusive.
+      startDay: toPracticeLocalIso(w.from).slice(0, 10),
+      endDay: toPracticeLocalIso(w.to).slice(0, 10),
+    }));
+
+    if (!this.legacyAvailability) {
       try {
-        for (let page = 1; page < 20; page++) {
-          const d = await this.gql<{ availabilitySlots: { data: { startLocal: string; endLocal: string; user?: { id: string } | null }[]; pageInfo?: { hasMore?: boolean | null } | null } }>(
-            `query Slots($from: Date!, $to: Date!, $users: [String], $locations: [String], $page: Int) { availabilitySlots(dateRange: { start: $from, end: $to }, userIds: $users, locationIds: $locations, pagination: { page: $page, pageSize: 200 }) { data { startLocal endLocal user { id } } pageInfo { hasMore } } }`,
-            { from: startDay, to: endDay, users: clinicianIds, locations: [locationId], page },
-          );
-          for (const s of d.availabilitySlots.data) {
-            if (!s.user?.id || !clinicianIds.includes(s.user.id)) continue;
-            out.push({ clinicianId: s.user.id, start: new Date(fromPracticeLocalNaive(s.startLocal)).getTime(), end: new Date(fromPracticeLocalNaive(s.endLocal)).getTime() });
+        const windows: Window[] = [];
+        for (const { startDay, endDay } of chunks) {
+          for (let page = 1; page <= MAX_PAGES; page++) {
+            const d = await this.gql<{ availabilitySlots: { data: { startLocal: string; endLocal: string; user?: { id: string } | null; room?: { id: string } | null }[]; pageInfo?: { hasMore?: boolean | null } | null } }>(
+              `query Slots($from: Date!, $to: Date!, $users: [String], $rooms: [String], $exclude: [ID], $page: Int) { availabilitySlots(dateRange: { start: $from, end: $to }, userIds: $users, roomIds: $rooms, excludeBookingIds: $exclude, pagination: { page: $page, pageSize: 200 }) { data { startLocal endLocal user { id } room { id } } pageInfo { hasMore } } }`,
+              { from: startDay, to: endDay, users: clinicianIds, rooms: roomIds, exclude: excludeBookingId ? [excludeBookingId] : undefined, page },
+            );
+            for (const s of d.availabilitySlots.data) {
+              // user and room filters are not intersected by Semble, so both are checked here
+              if (!s.user?.id || !clinicianIds.includes(s.user.id) || !s.room?.id || !roomIds.includes(s.room.id)) continue;
+              windows.push({ clinicianId: s.user.id, roomId: s.room.id, start: new Date(fromPracticeLocalNaive(s.startLocal)).getTime(), end: new Date(fromPracticeLocalNaive(s.endLocal)).getTime() });
+            }
+            if (!d.availabilitySlots.pageInfo?.hasMore) break;
           }
-          if (!d.availabilitySlots.pageInfo?.hasMore) break;
         }
+        return windows;
       } catch (e) {
-        if (!(e instanceof SembleAdapterError) || e.code !== "upstream") throw e;
-        // Practices without the New Appointment System: the legacy query, one clinician at a time (rows carry no clinician).
+        // Only Semble refusing the query itself switches this practice to the legacy query; anything else is a real error.
+        if (!(e instanceof SembleAdapterError) || e.code !== "upstream" || !NO_SLOTS_API.test(e.message)) throw e;
+        this.legacyAvailability = true;
+      }
+    }
+
+    const windows: Window[] = [];
+    for (const { startDay, endDay } of chunks) {
+      for (const roomId of roomIds) {
         for (const clinicianId of clinicianIds) {
+          // Whole Dublin days, so a chunk crossing a DST change never exceeds Semble's 7-day limit.
           const d = await this.gql<{ availabilities: { data: { start: string; end: string }[] } }>(
             `query Availabilities($from: Date!, $to: Date!, $location: ID!, $doctor: ID) { availabilities(dateRange:{start:$from,end:$to}, locationId:$location, doctorId:$doctor) { data { start end } } }`,
-            { from: toPracticeLocalIso(w.from), to: toPracticeLocalIso(w.to), location: locationId, doctor: clinicianId },
+            { from: `${startDay}T00:00:00.000Z`, to: `${endDay}T00:00:00.000Z`, location: roomId, doctor: clinicianId },
           );
-          for (const a of d.availabilities.data) out.push({ clinicianId, start: new Date(fromPracticeLocalIso(a.start)).getTime(), end: new Date(fromPracticeLocalIso(a.end)).getTime() });
+          for (const a of d.availabilities.data) windows.push({ clinicianId, roomId, start: new Date(fromPracticeLocalIso(a.start)).getTime(), end: new Date(fromPracticeLocalIso(a.end)).getTime() });
         }
       }
     }
-    return out;
+    if (!windows.length) return windows;
+    const busy = await this.busy(clinicianIds, fromUtc, toUtc, excludeBookingId);
+    return windows.flatMap((w) => subtract(w, busy.get(w.clinicianId) ?? []));
   }
 
-  /** Existing (non-deleted) bookings per clinician in the range, as true-UTC intervals. */
-  private async busy(clinicianIds: string[], fromUtc: string, toUtc: string): Promise<Map<string, { start: number; end: number; id: string }[]>> {
-    const out = new Map<string, { start: number; end: number; id: string }[]>();
+  /** Legacy path only: existing (non-deleted) bookings per clinician in the range, as true-UTC intervals. */
+  private async busy(clinicianIds: string[], fromUtc: string, toUtc: string, excludeBookingId?: string): Promise<Map<string, { start: number; end: number }[]>> {
+    const out = new Map<string, { start: number; end: number }[]>();
     for (const id of clinicianIds) {
-      const list: { start: number; end: number; id: string }[] = [];
-      for (let page = 1; page < 20; page++) {
+      const list: { start: number; end: number }[] = [];
+      for (let page = 1; page <= MAX_PAGES; page++) {
         const d = await this.gql<{ user: null | { bookings: null | { data: { id: string; start: string; end: string; deleted?: boolean | null }[]; pageInfo?: { hasMore?: boolean | null } | null } } }>(
           `query Busy($id: ID!, $from: Date!, $to: Date!, $page: Int) { user(id: $id) { bookings(start: $from, end: $to, page: $page, pageSize: 200) { data { id start end deleted } pageInfo { hasMore } } } }`,
           { id, from: toPracticeLocalIso(new Date(new Date(fromUtc).getTime() - 6 * 3_600_000).toISOString()), to: toPracticeLocalIso(toUtc), page },
         );
-        for (const b of d.user?.bookings?.data ?? []) if (!b.deleted) list.push({ id: b.id, start: new Date(fromPracticeLocalIso(b.start)).getTime(), end: new Date(fromPracticeLocalIso(b.end)).getTime() });
+        for (const b of d.user?.bookings?.data ?? []) if (!b.deleted && b.id !== excludeBookingId) list.push({ start: new Date(fromPracticeLocalIso(b.start)).getTime(), end: new Date(fromPracticeLocalIso(b.end)).getTime() });
         if (!d.user?.bookings?.pageInfo?.hasMore) break;
       }
       out.set(id, list);
@@ -380,13 +507,14 @@ export class GraphqlSembleAdapter implements SembleAdapter {
     return out;
   }
 
-  async getAvailability(q: { appointmentTypeId: string; fromUtc: string; toUtc: string; clinicianId?: string }, ignoreBookingId?: string): Promise<AvailabilitySlot[]> {
+  async getAvailability(q: AvailabilityQuery): Promise<AvailabilitySlot[]> {
     const ref = await this.reference();
     const type = ref.types.find((t) => t.id === q.appointmentTypeId);
     if (!type) throw new SembleAdapterError("Unknown appointment type", "not-found");
-    const clinicianIds = ref.clinicians.filter((c) => hasRole(c, type.role) && (!q.clinicianId || c.id === q.clinicianId)).map((c) => c.id);
-    if (!clinicianIds.length) return [];
-    const [windows, busy] = await Promise.all([this.freeWindows(clinicianIds, q.fromUtc, q.toUtc, ref.locationId), this.busy(clinicianIds, q.fromUtc, q.toUtc)]);
+    const roomIds = GraphqlSembleAdapter.roomsFor(ref, type.id);
+    const clinicianIds = GraphqlSembleAdapter.cliniciansFor(ref, type, q.clinicianId);
+    if (!roomIds.length || !clinicianIds.length) return [];
+    const windows = await this.freeWindows(clinicianIds, roomIds, q.fromUtc, q.toUtc, q.excludeAppointmentId);
     const step = Math.max(type.durationMinutes, 10) * 60_000;
     const floor = Date.now() + LEAD_TIME_MS;
     const from = new Date(q.fromUtc).getTime();
@@ -394,67 +522,101 @@ export class GraphqlSembleAdapter implements SembleAdapter {
     const seen = new Set<string>();
     const out: AvailabilitySlot[] = [];
     for (const w of windows) {
-      // slice the window into slots of the appointment length, skipping anything that overlaps an existing booking
+      // slice each free window into slots of the appointment length
       for (let s = w.start; s + step <= w.end; s += step) {
-        const e = s + step;
         if (s < floor || s < from || s > to) continue;
-        if ((busy.get(w.clinicianId) ?? []).some((b) => b.id !== ignoreBookingId && b.start < e && s < b.end)) continue;
-        const key = `${w.clinicianId}|${s}`;
+        const key = `${w.clinicianId}|${s}`; // the same clinician free in two rooms is still one slot
         if (seen.has(key)) continue;
         seen.add(key);
-        out.push({ clinicianId: w.clinicianId, startUtc: new Date(s).toISOString(), endUtc: new Date(e).toISOString() });
+        out.push({ clinicianId: w.clinicianId, startUtc: new Date(s).toISOString(), endUtc: new Date(s + step).toISOString() });
       }
     }
     return out.sort((a, b) => a.startUtc.localeCompare(b.startUtc));
   }
 
-  /** createBooking has no overlap guard, so re-read the diary for that exact slot immediately before writing. */
-  private async assertSlotFree(appointmentTypeId: string, clinicianId: string, startUtc: string, endUtc: string, ignoreBookingId?: string) {
-    const dayStart = new Date(startUtc);
-    dayStart.setUTCHours(0, 0, 0, 0);
-    const slots = await this.getAvailability({ appointmentTypeId, clinicianId, fromUtc: dayStart.toISOString(), toUtc: new Date(dayStart.getTime() + 86_400_000).toISOString() }, ignoreBookingId);
-    const wantS = new Date(startUtc).getTime();
-    const wantE = new Date(endUtc).getTime();
-    if (!slots.some((s) => new Date(s.startUtc).getTime() === wantS && new Date(s.endUtc).getTime() === wantE)) throw new SembleAdapterError("That time has just been taken", "slot-taken");
+  /**
+   * createBooking has no overlap guard, so re-read the diary immediately before writing:
+   * the requested time must sit inside one of the clinician's free windows. Returns the room to book.
+   */
+  private async roomForSlot(ref: Reference, type: AppointmentType, clinicianId: string, startUtc: string, endUtc: string, excludeBookingId?: string): Promise<string> {
+    const s = new Date(startUtc).getTime();
+    const e = new Date(endUtc).getTime();
+    if (!Number.isFinite(s) || e - s !== Math.max(type.durationMinutes, 10) * 60_000) throw new SembleAdapterError("That appointment time is not valid", "not-supported");
+    if (s < Date.now() + LEAD_TIME_MS - LEAD_TIME_GRACE_MS) throw new SembleAdapterError("Online bookings need 12 hours' notice", "not-supported");
+    const roomIds = GraphqlSembleAdapter.roomsFor(ref, type.id);
+    if (!roomIds.length) throw new SembleAdapterError("This appointment type is not enabled at the clinic in Semble yet", "not-supported");
+    if (!GraphqlSembleAdapter.cliniciansFor(ref, type, clinicianId).length) throw new SembleAdapterError("This clinician does not offer that appointment", "not-found");
+    const day = 86_400_000;
+    const windows = await this.freeWindows([clinicianId], roomIds, new Date(s - day).toISOString(), new Date(e + day).toISOString(), excludeBookingId);
+    const fit = windows.find((w) => w.clinicianId === clinicianId && w.start <= s && e <= w.end);
+    if (!fit) throw new SembleAdapterError("That time has just been taken", "slot-taken");
+    return fit.roomId;
   }
 
   private static bookingError(error: string | null | undefined, fallback: string): SembleAdapterError {
     const msg = error || fallback;
-    if (/taken|overlap|double/i.test(msg)) return new SembleAdapterError("That time has just been taken", "slot-taken");
+    if (/taken|overlap|double/i.test(msg)) return new SembleAdapterError("That time has just been taken", "slot-taken", msg);
     if (/available at location/i.test(msg)) return new SembleAdapterError("This appointment type is not enabled at the clinic in Semble yet", "not-supported", msg);
     return new SembleAdapterError(msg, "upstream");
+  }
+
+  /** After an unknown outcome: did this patient end up with a live booking at that time with that clinician? */
+  private async findBooking(patientId: string, clinicianId: string, startUtc: string): Promise<RawBooking | undefined> {
+    const s = new Date(startUtc).getTime();
+    const rows = await this.rawBookings(patientId, new Date(s - 86_400_000).toISOString(), new Date(s + 86_400_000).toISOString());
+    return rows.find((b) => !b.deleted && b.doctor?.id === clinicianId && new Date(fromPracticeLocalIso(b.start)).getTime() === s);
+  }
+
+  /** Provenance on the Semble row (Semble has no createdBy), in one mutation; failures are logged, not fatal. */
+  private async stamp(bookingId: string, pairs: [string, string][]) {
+    const fields = pairs.map((_, i) => `s${i}: updateBookingMetadata(bookingId: $id, key: $k${i}, value: $v${i}) { data { id } error }`).join(" ");
+    const args = pairs.map((_, i) => `$k${i}: String!, $v${i}: String!`).join(", ");
+    const vars: Record<string, string> = { id: bookingId };
+    pairs.forEach(([k, v], i) => Object.assign(vars, { [`k${i}`]: k, [`v${i}`]: v }));
+    try {
+      const d = await this.gql<Record<string, { data: { id: string } | null; error?: string | null }>>(`mutation Stamp($id: ID!, ${args}) { ${fields} }`, vars);
+      const failed = pairs.filter((_, i) => !d[`s${i}`]?.data).map(([k]) => k);
+      if (failed.length) console.error(`Semble booking ${bookingId}: metadata not saved: ${failed.join(", ")}`);
+    } catch (e) {
+      console.error(`Semble booking ${bookingId}: metadata not saved`, e instanceof Error ? e.message : e);
+    }
   }
 
   async book(patientId: string, req: { appointmentTypeId: string; clinicianId: string; startUtc: string; endUtc: string; patientNotes?: string; programmeStepId?: string }) {
     const ref = await this.reference();
     const type = ref.types.find((t) => t.id === req.appointmentTypeId);
-    const clinician = ref.clinicians.find((c) => c.id === req.clinicianId);
-    if (!type || !clinician || !hasRole(clinician, type.role)) throw new SembleAdapterError("Unknown appointment type or clinician", "not-found");
-    await this.assertSlotFree(req.appointmentTypeId, req.clinicianId, req.startUtc, req.endUtc);
-    const d = await this.gql<{ createBooking: { data: RawBooking | null; error?: string | null } }>(
-      `mutation CreateBooking($b: BookingDataInput!) { createBooking(bookingData: $b) { data { ${BOOKING_FIELDS} } error } }`,
-      {
-        b: {
-          patient: patientId,
-          location: ref.locationId,
-          doctor: req.clinicianId,
-          bookingType: req.appointmentTypeId,
-          start: toPracticeLocalIso(req.startUtc),
-          end: toPracticeLocalIso(req.endUtc),
-          comments: req.patientNotes,
-          // API bookings are silent unless asked; the patient gets Semble's confirmation, reminder and follow-up.
-          sendPatientMessages: { confirmation: true, reminder: true, followup: true },
+    if (!type) throw new SembleAdapterError("Unknown appointment type", "not-found");
+    const roomId = await this.roomForSlot(ref, type, req.clinicianId, req.startUtc, req.endUtc);
+    let booking: RawBooking;
+    try {
+      const d = await this.gql<{ createBooking: { data: RawBooking | null; error?: string | null } }>(
+        `mutation CreateBooking($b: BookingDataInput!) { createBooking(bookingData: $b) { data { ${BOOKING_FIELDS} } error } }`,
+        {
+          b: {
+            patient: patientId,
+            location: roomId,
+            doctor: req.clinicianId,
+            bookingType: req.appointmentTypeId,
+            start: toPracticeLocalIso(req.startUtc),
+            end: toPracticeLocalIso(req.endUtc),
+            comments: req.patientNotes,
+            // API bookings are silent unless asked; the patient gets Semble's confirmation, reminder and follow-up.
+            sendPatientMessages: { confirmation: true, reminder: true, followup: true },
+          },
         },
-      },
-    );
-    if (!d.createBooking.data) throw GraphqlSembleAdapter.bookingError(d.createBooking.error, "Booking failed");
-    const id = d.createBooking.data.id;
-    // Stamp provenance on the Semble row — Semble has no createdBy; this is how support can tell portal bookings apart.
-    const stamp: [string, string][] = [["source", "portal"], ["portalPatientId", patientId], ...(req.programmeStepId ? [["programmeStep", req.programmeStepId] as [string, string]] : [])];
-    for (const [key, value] of stamp) {
-      await this.gql(`mutation Stamp($id: ID!, $key: String!, $value: String!) { updateBookingMetadata(bookingId: $id, key: $key, value: $value) { data { id } error } }`, { id, key, value }).catch(() => undefined);
+      );
+      if (!d.createBooking.data) throw GraphqlSembleAdapter.bookingError(d.createBooking.error, "Booking failed");
+      booking = d.createBooking.data;
+    } catch (e) {
+      if (!(e instanceof SembleAdapterError) || e.code !== "unknown-outcome") throw e;
+      // Look before telling the patient anything: the booking may well exist.
+      const found = await this.findBooking(patientId, req.clinicianId, req.startUtc).catch(() => undefined);
+      if (!found) throw e;
+      booking = found;
     }
-    const a = await this.mapBooking(d.createBooking.data);
+    // Links the booking to its programme step; programme.ts also matches unstamped bookings by type and date.
+    await this.stamp(booking.id, [["source", "portal"], ["portalPatientId", patientId], ...(req.programmeStepId ? [["programmeStep", req.programmeStepId] as [string, string]] : [])]);
+    const a = this.mapBooking(ref, booking);
     return { ...a, programmeStepId: req.programmeStepId ?? a.programmeStepId };
   }
 
@@ -463,27 +625,41 @@ export class GraphqlSembleAdapter implements SembleAdapter {
     if (!own) throw new SembleAdapterError("Appointment not found", "not-found");
     if (!own.canReschedule) throw new SembleAdapterError("This appointment can no longer be moved online", "not-supported");
     const ref = await this.reference();
-    const clinician = ref.clinicians.find((c) => c.id === req.clinicianId);
-    if (!clinician || !hasRole(clinician, own.type.role)) throw new SembleAdapterError("Unknown clinician", "not-found");
-    await this.assertSlotFree(own.type.id, req.clinicianId, req.startUtc, req.endUtc, own.id);
-    const d = await this.gql<{ updateBooking: { data: RawBooking | null; error?: string | null } }>(
-      `mutation UpdateBooking($id: ID!, $b: BookingUpdateDataInput!) { updateBooking(id: $id, bookingData: $b) { data { ${BOOKING_FIELDS} } error } }`,
-      // enforceDoubleBooking is Semble's only server-side overlap guard and exists only on update.
-      { id: req.appointmentId, b: { doctor: req.clinicianId, start: toPracticeLocalIso(req.startUtc), end: toPracticeLocalIso(req.endUtc), enforceDoubleBooking: true, sendPatientMessages: { confirmation: true, reminder: true, followup: true } } },
-    );
-    if (!d.updateBooking.data) throw GraphqlSembleAdapter.bookingError(d.updateBooking.error, "Reschedule failed");
-    return this.mapBooking(d.updateBooking.data);
+    const type = ref.types.find((t) => t.id === own.type.id);
+    if (!type) throw new SembleAdapterError("This appointment can no longer be moved online", "not-supported");
+    const roomId = await this.roomForSlot(ref, type, req.clinicianId, req.startUtc, req.endUtc, own.id);
+    try {
+      const d = await this.gql<{ updateBooking: { data: RawBooking | null; error?: string | null } }>(
+        `mutation UpdateBooking($id: ID!, $b: BookingUpdateDataInput!) { updateBooking(id: $id, bookingData: $b) { data { ${BOOKING_FIELDS} } error } }`,
+        // enforceDoubleBooking is Semble's only server-side overlap guard and exists only on update.
+        { id: req.appointmentId, b: { location: roomId, doctor: req.clinicianId, start: toPracticeLocalIso(req.startUtc), end: toPracticeLocalIso(req.endUtc), enforceDoubleBooking: true, sendPatientMessages: { confirmation: true, reminder: true, followup: true } } },
+      );
+      if (!d.updateBooking.data) throw GraphqlSembleAdapter.bookingError(d.updateBooking.error, "Reschedule failed");
+      return this.mapBooking(ref, d.updateBooking.data);
+    } catch (e) {
+      if (!(e instanceof SembleAdapterError) || e.code !== "unknown-outcome") throw e;
+      const now = await this.getAppointment(patientId, req.appointmentId).catch(() => null);
+      if (now && now.startUtc === new Date(req.startUtc).toISOString() && now.clinician.id === req.clinicianId) return now;
+      throw e;
+    }
   }
 
   async cancel(patientId: string, appointmentId: string) {
     const own = await this.getAppointment(patientId, appointmentId);
     if (!own) throw new SembleAdapterError("Appointment not found", "not-found");
     if (!own.canCancel) throw new SembleAdapterError("This appointment can no longer be cancelled online", "not-supported");
-    const d = await this.gql<{ deleteBooking: { data: { id: string } | null; error?: string | null } }>(
-      `mutation DeleteBooking($id: ID!) { deleteBooking(id: $id, sendCancellationMessages: true, notifyPractice: true) { data { id } error } }`,
-      { id: appointmentId },
-    );
-    if (!d.deleteBooking.data) throw new SembleAdapterError(d.deleteBooking.error || "Cancellation failed", "upstream");
+    try {
+      const d = await this.gql<{ deleteBooking: { data: { id: string } | null; error?: string | null } }>(
+        `mutation DeleteBooking($id: ID!) { deleteBooking(id: $id, sendCancellationMessages: true, notifyPractice: true) { data { id } error } }`,
+        { id: appointmentId },
+      );
+      if (!d.deleteBooking.data) throw new SembleAdapterError(d.deleteBooking.error || "Cancellation failed", "upstream");
+    } catch (e) {
+      if (!(e instanceof SembleAdapterError) || e.code !== "unknown-outcome") throw e;
+      const now = await this.getAppointment(patientId, appointmentId).catch(() => null);
+      if (now?.status === "cancelled") return;
+      throw e;
+    }
   }
 
   /* ------------------------------------------------------------------ clinical artefacts */
@@ -491,22 +667,29 @@ export class GraphqlSembleAdapter implements SembleAdapter {
   async listPrescriptions(patientId: string): Promise<Prescription[]> {
     const ref = await this.reference();
     // Patient sub-field, not the practice-wide sweep (39% duplicate rows there). No updatedAt on prescriptions → no polling.
-    const d = await this.gql<{ patient: null | { prescriptions: null | { data: { id: string; date?: string | null; status?: string | null; doctor?: { id: string } | null; patient?: { id: string } | null; drugs?: { drug?: string | null; dosage?: string | null; quantity?: string | null; comments?: string | null }[] | null; dateShared?: string | null }[] } } }>(
-      `query PatientPrescriptions($id: ID!) { patient(id: $id) { prescriptions(page: 1, pageSize: 50) { data { id date status dateShared doctor { id } patient { id } drugs { drug dosage quantity comments } } } } }`,
-      { id: patientId },
-    );
     const seen = new Map<string, Prescription>();
-    for (const r of d.patient?.prescriptions?.data ?? []) {
-      if (r.patient?.id !== patientId || seen.has(r.id) || !r.date) continue;
-      seen.set(r.id, {
-        id: r.id,
-        issuedAtUtc: fromPracticeLocalIso(r.date),
-        prescriber: ref.clinicians.find((c) => c.id === r.doctor?.id) ?? { id: r.doctor?.id ?? "", firstName: "", lastName: "", fullName: "Your doctor", role: "doctor" },
-        drugs: (r.drugs ?? []).map((x) => ({ name: x.drug ?? "Medication", dosage: x.dosage ?? undefined, quantity: x.quantity ?? undefined, comments: x.comments ?? undefined })),
-        status: /cancel|void/i.test(r.status ?? "") ? "cancelled" : r.dateShared ? "sent" : "issued",
-        // The list never mints the 15-minute PDF URL; getPrescriptionPdfUrl does, on click.
-        pdfAvailable: true,
-      });
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      const d = await this.gql<{ patient: null | { prescriptions: null | { data: { id: string; date?: string | null; status?: string | null; doctor?: { id: string } | null; patient?: { id: string } | null; drugs?: { drug?: string | null; dosage?: string | null; quantity?: string | null; comments?: string | null }[] | null; orders?: { status?: string | null; provider?: string | null }[] | null }[]; pageInfo?: { hasMore?: boolean | null } | null } } }>(
+        `query PatientPrescriptions($id: ID!, $page: Int) { patient(id: $id) { prescriptions(page: $page, pageSize: 50) { data { id date status doctor { id } patient { id } drugs { drug dosage quantity comments } orders { status provider } } pageInfo { hasMore } } } }`,
+        { id: patientId, page },
+      );
+      const rows = d.patient?.prescriptions;
+      for (const r of rows?.data ?? []) {
+        if (r.patient?.id !== patientId || seen.has(r.id) || !r.date) continue;
+        // "sent" means sent to a pharmacy (a Semble pharmacy order), not shared with the patient.
+        const order = r.orders?.find((o) => o.status === "SENT");
+        seen.set(r.id, {
+          id: r.id,
+          issuedAtUtc: trueUtc(r.date), // a system timestamp (it carries milliseconds), not a wall-clock booking time
+          prescriber: ref.clinicians.find((c) => c.id === r.doctor?.id) ?? { id: r.doctor?.id ?? "", firstName: "", lastName: "", fullName: "Your doctor", role: "doctor" },
+          drugs: (r.drugs ?? []).map((x) => ({ name: x.drug ?? "Medication", dosage: x.dosage ?? undefined, quantity: x.quantity ?? undefined, comments: x.comments ?? undefined })),
+          status: /cancel|void/i.test(r.status ?? "") ? "cancelled" : order ? "sent" : "issued",
+          fulfilment: order ? { method: "pharmacy", pharmacyName: order.provider ?? undefined } : undefined,
+          // The list never mints the 15-minute PDF URL; getPrescriptionPdfUrl does, on click.
+          pdfAvailable: true,
+        });
+      }
+      if (!rows?.pageInfo?.hasMore) break;
     }
     return [...seen.values()].sort((a, b) => b.issuedAtUtc.localeCompare(a.issuedAtUtc));
   }
@@ -520,12 +703,19 @@ export class GraphqlSembleAdapter implements SembleAdapter {
     return d.prescription.pdfDownloadUrl ?? null; // 15-minute URL — streamed by the portal, never logged or sent to the browser
   }
 
+  /** Everything staff shared with the patient (all pages). */
   private async shared(patientId: string) {
-    const d = await this.gql<{ patient: null | { documentsSharedWithPatient: { data: { documentId: string | null; title: string; type: string; sharedAt: string }[] } } }>(
-      `query Shared($id: ID!) { patient(id: $id) { documentsSharedWithPatient(page: 1, pageSize: 100) { data { documentId title type sharedAt } } } }`,
-      { id: patientId },
-    );
-    return d.patient?.documentsSharedWithPatient.data ?? [];
+    const out: { documentId: string | null; title: string; type: string; sharedAt: string }[] = [];
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      const d = await this.gql<{ patient: null | { documentsSharedWithPatient: { data: { documentId: string | null; title: string; type: string; sharedAt: string }[]; pageInfo?: { hasMore?: boolean | null } | null } } }>(
+        `query Shared($id: ID!, $page: Int) { patient(id: $id) { documentsSharedWithPatient(page: $page, pageSize: 100) { data { documentId title type sharedAt } pageInfo { hasMore } } } }`,
+        { id: patientId, page },
+      );
+      const rows = d.patient?.documentsSharedWithPatient;
+      out.push(...(rows?.data ?? []));
+      if (!rows?.pageInfo?.hasMore) break;
+    }
+    return out;
   }
 
   async listDocuments(patientId: string): Promise<PatientDocument[]> {
@@ -536,7 +726,7 @@ export class GraphqlSembleAdapter implements SembleAdapter {
     const seen = new Map<string, PatientDocument>();
     for (const s of await this.shared(patientId)) {
       if (!s.documentId || seen.has(s.documentId) || !["document", "letter", "lab"].includes(s.type)) continue; // invoices/prescriptions have their own screens
-      seen.set(s.documentId, { id: s.documentId, kind: kindOf(s.type, s.title), title: s.title, createdAtUtc: fromPracticeLocalIso(s.sharedAt), downloadable: s.type === "document" || s.type === "letter" });
+      seen.set(s.documentId, { id: s.documentId, kind: kindOf(s.type, s.title), title: s.title, createdAtUtc: trueUtc(s.sharedAt), downloadable: s.type === "document" || s.type === "letter" });
     }
     return [...seen.values()].sort((a, b) => b.createdAtUtc.localeCompare(a.createdAtUtc));
   }
@@ -566,19 +756,20 @@ export class GraphqlSembleAdapter implements SembleAdapter {
 
   async listInvoices(patientId: string): Promise<Invoice[]> {
     // Patient-scoped read. The practice-wide invoices(dateRange) sweep pages across every patient and misses rows.
-    const d = await this.gql<{ patient: null | { invoices: null | { id: string; invoiceNumber?: number | null; date: string; total?: number | null; outstanding?: number | null; refunded?: number | null; paidOrOutstanding?: string | null; status?: string | null; patientId?: string | null }[] } }>(
-      `query PatientInvoices($id: ID!, $from: Date!, $to: Date!) { patient(id: $id) { invoices(start: $from, end: $to) { id invoiceNumber date total outstanding refunded paidOrOutstanding status patientId } } }`,
+    const d = await this.gql<{ patient: null | { invoices: null | { id: string; type?: string | null; invoiceNumber?: number | null; date: string; total?: number | null; outstanding?: number | null; refunded?: number | null; paidOrOutstanding?: string | null; status?: string | null; patientId?: string | null }[] } }>(
+      `query PatientInvoices($id: ID!, $from: Date!, $to: Date!) { patient(id: $id) { invoices(start: $from, end: $to) { id type invoiceNumber date total outstanding refunded paidOrOutstanding status patientId } } }`,
       { id: patientId, from: new Date(Date.now() - 400 * 86_400_000).toISOString(), to: new Date(Date.now() + 86_400_000).toISOString() },
     );
     const seen = new Map<string, Invoice>();
     for (const i of d.patient?.invoices ?? []) {
       if ((i.patientId && i.patientId !== patientId) || seen.has(i.id)) continue;
+      if (i.type && i.type !== "invoice") continue; // credit notes and payments on account are not invoices
       const total = i.total ?? 0;
       const status: Invoice["status"] = /void|cancel/i.test(i.status ?? "") ? "void" : (i.refunded ?? 0) > 0 && (i.refunded ?? 0) >= total ? "refunded" : /^paid$/i.test(i.paidOrOutstanding ?? "") || (i.outstanding ?? 1) === 0 ? "paid" : "unpaid";
       seen.set(i.id, {
         id: i.id,
         number: i.invoiceNumber != null ? String(i.invoiceNumber) : i.id,
-        issuedAtUtc: fromPracticeLocalIso(i.date),
+        issuedAtUtc: fromPracticeLocalIso(i.date), // a calendar date (Dublin midnight)
         description: "Clinic invoice",
         amount: total,
         status,
@@ -592,4 +783,13 @@ export class GraphqlSembleAdapter implements SembleAdapter {
   async listQuestionnaires(): Promise<QuestionnaireSummary[]> {
     return []; // Portal forms are portal-owned; where they land in Semble is an open decision (see /architecture).
   }
+}
+
+/** A free window minus overlapping busy intervals. */
+function subtract(w: Window, busy: { start: number; end: number }[]): Window[] {
+  let parts: Window[] = [w];
+  for (const b of busy) {
+    parts = parts.flatMap((p) => (b.end <= p.start || b.start >= p.end ? [p] : [...(b.start > p.start ? [{ ...p, end: b.start }] : []), ...(b.end < p.end ? [{ ...p, start: b.end }] : [])]));
+  }
+  return parts;
 }

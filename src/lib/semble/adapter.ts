@@ -83,7 +83,13 @@ export class SembleAdapterError extends Error {
       | "slot-taken"
       | "unauthorised"
       | "not-supported"
-      | "upstream",
+      | "upstream"
+      /** no answer from Semble; a read can be retried */
+      | "unreachable"
+      /** a write was sent but its result is unknown — the patient must check before retrying */
+      | "unknown-outcome"
+      /** some of a multi-step update was saved */
+      | "partial",
     public readonly cause?: unknown,
   ) {
     super(message);

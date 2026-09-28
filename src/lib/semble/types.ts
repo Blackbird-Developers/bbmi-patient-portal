@@ -112,6 +112,8 @@ export interface AvailabilityQuery {
   toUtc: string;
   /** restrict to one clinician (continuity of care) */
   clinicianId?: string;
+  /** when rescheduling: the patient's own appointment, whose time counts as free */
+  excludeAppointmentId?: string;
 }
 
 export type PrescriptionStatus = "issued" | "sent" | "dispensed" | "expired" | "cancelled";

@@ -27,7 +27,30 @@ The **Demo: switch patient** panel at the bottom of the left rail jumps between 
 - **Real**: the journey engine (`src/lib/portal/journey.ts`), the 90-day programme windows and ordering (`programme.ts`), the booking flow against the adapter interface, forms, weight tracking, every member state and its copy, the design system.
 - **Mocked**: Semble (in-memory adapter with synthetic patients, clinicians, bookings, prescriptions, letters, invoices — names are fictional), Stripe (plan changes mutate the in-memory store), authentication (a cookie holding the demo user id).
 - **Removed, not mocked**: patient messaging (Semble's communications are outbound only — a patient reply never enters Semble and staff have no inbox) and dose tracking (no Semble model for a patient-entered dose diary, and today's portal does not ask for one). Prescriptions are read-only with no download: the script goes from the doctor to the pharmacy. Rather than demo something the client cannot ship, these are gone from the screens and written up in `docs/PRODUCT.md`.
-- `SEMBLE_ADAPTER=graphql` + `SEMBLE_API_TOKEN` switches to the real adapter skeleton (`src/lib/semble/graphql.ts`). It has **not** been run against a BBMI tenant — no BBMI token exists yet. Never point it at another client's practice.
+- `SEMBLE_ADAPTER=graphql` switches to the real adapter (`src/lib/semble/graphql.ts`), verified end to end against the **Beyond BMI (Sandbox)** Semble practice — see below. Never point it at another client's practice.
+
+## Run against the Semble sandbox
+
+Create `.env.local` (git-ignored):
+
+```bash
+SEMBLE_ADAPTER=graphql
+SEMBLE_GRAPHQL_URL=https://open.sandbox.semble.io/graphql
+SEMBLE_API_TOKEN=<the Beyond BMI sandbox token>
+PORTAL_SESSION_SECRET=<openssl rand -hex 32>
+PORTAL_ALLOWED_EMAILS=<email on a Semble patient record>
+PORTAL_DEMO_QUICK_LOGIN=1
+```
+
+Sign in with that email. Profile, clinicians, appointment types, availability, bookings (book, reschedule, cancel), prescriptions, shared documents and invoices are live Semble data; the journey stage, plan, weights and tasks are still demo data, switchable from **Demo: journey stage** in the left rail.
+
+What Semble must have for booking to work:
+- appointment types are products tagged with metadata `portalSlug` and `portalRole`;
+- clinicians are tagged with `portalRoles`;
+- the types are ticked under **Settings → Locations → room → Services provided**;
+- the clinicians have availability in that room.
+
+The adapter refuses a production Semble URL unless `PORTAL_ALLOW_PRODUCTION=1`. Leave that unset until real sign-in exists.
 
 ## Layout
 

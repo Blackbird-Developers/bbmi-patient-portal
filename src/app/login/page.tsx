@@ -11,12 +11,18 @@ import { ShieldCheck } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string; email?: string }> }) {
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   if (await currentUser()) redirect("/");
   const sp = await searchParams;
   const mock = sembleMode() === "mock";
   const users = mock ? listDemoUsers() : [];
-  const linkable = mock ? [] : allowedEmails();
+  // One-click sign-in is a demo convenience: sandbox only, and only when explicitly switched on.
+  const linkable = !mock && sembleTarget() === "sandbox" && process.env.PORTAL_DEMO_QUICK_LOGIN === "1" ? allowedEmails() : [];
+  const errorText =
+    sp.error === "unknown" ? (mock ? "We couldn't find an account with that email." : "That email isn't enabled for this prototype, or no Semble patient has it.")
+    : sp.error === "duplicate" ? "More than one clinic record has this email. Call the care team so they can fix it."
+    : sp.error === "busy" ? "We couldn't reach the clinic system. Try again in a moment."
+    : undefined;
   return (
     <div className="grid min-h-screen lg:grid-cols-[1fr_1.1fr]">
       <div className="flex flex-col justify-center px-6 py-10 sm:px-12 lg:px-16">
@@ -29,8 +35,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <p className="mt-1 text-[15px] text-ink-soft">Your appointments, treatment and progress in one place.</p>
 
           <form action={signInAction} className="mt-8 space-y-4">
-            <Field label="Email address" htmlFor="email" error={sp.error === "unknown" ? (mock ? "We couldn't find an account with that email." : "That email isn't enabled for this prototype, or no Semble patient has it.") : undefined}>
-              <Input id="email" name="email" type="email" autoComplete="email" required defaultValue={sp.email ?? ""} placeholder="you@example.ie" />
+            <Field label="Email address" htmlFor="email" error={errorText}>
+              <Input id="email" name="email" type="email" autoComplete="email" required placeholder="you@example.ie" />
             </Field>
             <Field label="Password" htmlFor="password" hint={mock ? "Demo mode — any password works." : "Prototype — passwords are not checked yet."}>
               <Input id="password" name="password" type="password" autoComplete="current-password" placeholder="••••••••" />
@@ -60,7 +66,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
                 ))}
               </form>
             </div>
-          ) : (
+          ) : linkable.length ? (
             <div className="mt-10 rounded-lg border border-divider bg-paper-soft p-4">
               <div className="eyebrow mb-1">Connected to Semble {sembleTarget()}</div>
               <p className="mb-2 text-[12.5px] text-ink-soft">Signs in as the Semble patient with this email. Appointments, prescriptions and documents are live Semble data.</p>
@@ -76,6 +82,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
                 ))}
               </div>
             </div>
+          ) : (
+            <p className="mt-10 text-[12.5px] text-muted">Connected to Semble {sembleTarget()}.</p>
           )}
 
           <p className="mt-8 flex items-center gap-2 text-[12px] text-muted">

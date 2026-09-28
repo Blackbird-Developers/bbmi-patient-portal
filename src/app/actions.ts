@@ -2,15 +2,22 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireUser, signIn, signInAs, signOut, switchStage } from "@/lib/auth";
+import { rememberStage, requireUser, signIn, signInAs, signOut, switchStage } from "@/lib/auth";
 import { getSemble, SembleAdapterError } from "@/lib/semble";
 import { addWeight, completeTask, continueToOngoing, markConsultBooked, markQuestionnaireDone, setPaymentResolved, upgradeToNinetyDay } from "@/lib/portal/store";
 
 /* ---------------------------------------------------------------- auth */
 export async function signInAction(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim();
-  const u = await signIn(email);
-  if (!u) redirect(`/login?error=unknown&email=${encodeURIComponent(email)}`);
+  let u;
+  try {
+    u = await signIn(email);
+  } catch (e) {
+    if (e instanceof SembleAdapterError) redirect(`/login?error=${/more than one/i.test(e.message) ? "duplicate" : "busy"}`);
+    throw e;
+  }
+  // The typed email is never put in the URL: in Semble mode it is a real patient's address.
+  if (!u) redirect("/login?error=unknown");
   redirect("/");
 }
 
@@ -75,17 +82,21 @@ export async function bookAction(formData: FormData) {
   const programmeStepId = String(formData.get("programmeStepId") ?? "") || undefined;
   const patientNotes = String(formData.get("notes") ?? "") || undefined;
   const typeSlug = String(formData.get("typeSlug") ?? "");
+  let bookedId: string;
   try {
     const a = await semble.book(u.semblePatientId, { appointmentTypeId, clinicianId, startUtc, endUtc, programmeStepId, patientNotes });
-    if (typeSlug === "specialist-consultation") markConsultBooked(u.userId);
+    bookedId = a.id;
+    if (a.type.slug === "specialist-consultation") markConsultBooked(u.userId);
     if (programmeStepId === "coach-s2") completeTask(u.userId, "coach-s2");
     if (programmeStepId === "nurse-m2") completeTask(u.userId, "nurse");
-    revalidatePath("/", "layout");
-    redirect(`/appointments?booked=${a.id}`);
+    await rememberStage(u);
   } catch (e) {
+    if (e instanceof SembleAdapterError && e.code === "unknown-outcome") redirect("/appointments?error=book-unknown");
     if (e instanceof SembleAdapterError) redirect(`/book/${typeSlug}?${new URLSearchParams({ ...(programmeStepId ? { step: programmeStepId } : {}), error: e.code === "slot-taken" ? "taken" : "unavailable" })}`);
     throw e;
   }
+  revalidatePath("/", "layout");
+  redirect(`/appointments?booked=${bookedId}`);
 }
 
 export async function cancelAppointmentAction(formData: FormData) {
@@ -93,7 +104,7 @@ export async function cancelAppointmentAction(formData: FormData) {
   try {
     await getSemble().cancel(u.semblePatientId, String(formData.get("appointmentId")));
   } catch (e) {
-    if (e instanceof SembleAdapterError) redirect("/appointments?error=cancel");
+    if (e instanceof SembleAdapterError) redirect(`/appointments?error=${e.code === "unknown-outcome" ? "cancel-unknown" : "cancel"}`);
     throw e;
   }
   revalidatePath("/", "layout");
@@ -114,6 +125,7 @@ export async function rescheduleAction(formData: FormData) {
     });
     id = a.id;
   } catch (e) {
+    if (e instanceof SembleAdapterError && e.code === "unknown-outcome") redirect("/appointments?error=move-unknown");
     if (e instanceof SembleAdapterError) redirect(`/book/${typeSlug}?${new URLSearchParams({ reschedule: appointmentId, error: e.code === "slot-taken" ? "taken" : "unavailable" })}`);
     throw e;
   }
@@ -126,6 +138,7 @@ export async function upgradeAction(formData: FormData) {
   const u = await requireUser();
   const plan = String(formData.get("plan")) === "ninety-day-upfront" ? "ninety-day-upfront" : "ninety-day-instalments";
   upgradeToNinetyDay(u.userId, plan);
+  await rememberStage(u);
   revalidatePath("/", "layout");
   redirect("/?welcome=90day");
 }
@@ -134,6 +147,7 @@ export async function continueAction(formData: FormData) {
   const u = await requireUser();
   const plan = String(formData.get("plan")) === "ongoing-150" ? "ongoing-150" : "ongoing-75";
   continueToOngoing(u.userId, plan);
+  await rememberStage(u);
   revalidatePath("/", "layout");
   redirect("/?welcome=ongoing");
 }
@@ -141,6 +155,7 @@ export async function continueAction(formData: FormData) {
 export async function payInstalmentAction() {
   const u = await requireUser();
   setPaymentResolved(u.userId);
+  await rememberStage(u);
   revalidatePath("/", "layout");
   redirect("/?resumed=1");
 }

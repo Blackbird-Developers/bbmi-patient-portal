@@ -19,7 +19,7 @@ export async function updateContactAction(formData: FormData) {
   try {
     await getSemble().updatePatientContact(u.semblePatientId, { phone, address });
   } catch (e) {
-    if (e instanceof SembleAdapterError) redirect("/account?error=contact");
+    if (e instanceof SembleAdapterError) redirect(`/account?error=${e.code === "partial" ? "contact-partial" : "contact"}`);
     throw e;
   }
   revalidatePath("/account");

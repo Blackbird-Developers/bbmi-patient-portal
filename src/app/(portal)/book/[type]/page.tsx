@@ -57,14 +57,16 @@ export default async function BookPage({ params, searchParams }: { params: Promi
   let rangeEnd = new Date(earliest.getTime() + RANGE_DAYS * DAY);
   let windowNote: string | undefined;
   let nextRangeHref: string | undefined = `/book/${slug}?${new URLSearchParams({ ...(sp.step ? { step: sp.step } : {}), ...(sp.reschedule ? { reschedule: sp.reschedule } : {}), date: new Date(rangeEnd).toISOString().slice(0, 10) }).toString()}`;
-  // A missed step's window has already closed; it can be rebooked up to the end of the programme instead.
-  const capUtc = step?.status === "missed" ? j.programme?.endUtc : step?.windowToUtc;
+  // A missed step's window has already closed. It can be rebooked, but only before the next step of the same kind
+  // opens (so the order holds), and never after the programme ends.
+  const nextOpens = step?.status === "missed" ? j.programme?.steps.filter((s) => s.after?.includes(step.id) && s.windowFromUtc).map((s) => s.windowFromUtc!).sort()[0] : undefined;
+  const capUtc = step?.status === "missed" ? (nextOpens && j.programme && nextOpens < j.programme.endUtc ? nextOpens : j.programme?.endUtc) : step?.windowToUtc;
   if (capUtc) {
     const cap = utcMidnight(capUtc);
     if (cap.getTime() < rangeEnd.getTime()) {
       rangeEnd = new Date(cap.getTime() + DAY);
       nextRangeHref = undefined;
-      windowNote = step?.status === "missed" ? `Rebook before your programme ends on ${fmtDate(capUtc)}` : `Your window for this appointment closes ${fmtDate(capUtc)}`;
+      windowNote = step?.status === "missed" ? `Rebook by ${fmtDate(capUtc)}` : `Your window for this appointment closes ${fmtDate(capUtc)}`;
     }
   }
 
@@ -72,7 +74,7 @@ export default async function BookPage({ params, searchParams }: { params: Promi
   const roleClinicians = allClinicians.filter((c) => hasRole(c, type.role));
   const usualId = user.careTeam[type.role];
   const clinicians: PickerClinician[] = roleClinicians.map((c) => ({ id: c.id, firstName: c.firstName, lastName: c.lastName, display: clinicianDisplay(c), isCareTeam: c.id === usualId }));
-  const slots = locked ? [] : await semble.getAvailability({ appointmentTypeId: type.id, fromUtc: earliest.toISOString(), toUtc: rangeEnd.toISOString() });
+  const slots = locked ? [] : await semble.getAvailability({ appointmentTypeId: type.id, fromUtc: earliest.toISOString(), toUtc: rangeEnd.toISOString(), excludeAppointmentId: reschedule?.id });
   const pickerType: PickerType = {
     id: type.id,
     slug: type.slug,

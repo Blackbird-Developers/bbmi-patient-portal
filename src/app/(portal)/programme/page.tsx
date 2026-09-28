@@ -287,7 +287,8 @@ function BeforeProgramme({ j }: { j: JourneyView }) {
 function OngoingCare({ j }: { j: JourneyView }) {
   const m = j.user.membership;
   const ent = m.entitlements;
-  const nextByRole = (role: ClinicianRole) => j.upcoming.find((a) => a.clinician.role === role);
+  // By the kind of appointment, not the clinician: one clinician can cover several roles.
+  const nextByRole = (role: ClinicianRole) => j.upcoming.find((a) => a.type.role === role);
   const rx = j.activePrescription;
 
   const rows: { role: ClinicianRole; title: string; cadence: string; slug: string; show: boolean }[] = [

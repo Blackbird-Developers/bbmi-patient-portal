@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { getSemble } from "../semble";
 import type { Appointment, Clinician, Prescription } from "../semble/types";
 import { NINETY_DAY_STEPS, buildProgrammeView, programmeProgress } from "./programme";
@@ -93,7 +94,10 @@ function headline(p: PortalPatient, v: { nextAppointment?: Appointment; programm
   }
 }
 
-export async function loadJourney(user: PortalPatient, nowUtc = new Date().toISOString()): Promise<JourneyView> {
+/** Memoised per request: the layout and the page both need it, and each load costs several Semble calls. */
+export const loadJourney = cache((user: PortalPatient) => buildJourney(user));
+
+async function buildJourney(user: PortalPatient, nowUtc = new Date().toISOString()): Promise<JourneyView> {
   const semble = getSemble();
   const now = new Date(nowUtc);
   const [appointments, prescriptions, clinicians] = await Promise.all([

@@ -53,11 +53,20 @@ function membershipFrom(t: api.TierStatus, info: api.PersonalInformation | null,
   const nd = t.ninetyDay;
   if (nd) {
     m.programmeStartUtc = nd.programmeBegins;
-    // €399: activeUntil is the programme end. €150×3: activeUntil is the monthly period end, so the end is the anchor + 90 days.
-    m.programmeEndUtc = nd.variant === "upfront_399" ? nd.activeUntil : new Date(new Date(nd.programmeBegins).getTime() + 90 * DAY).toISOString();
-    if (nd.variant === "installments_450" && t.stage === "ninety_day_active") {
-      m.nextChargeUtc = nd.activeUntil;
-      m.nextChargeAmount = 150;
+    if (nd.variant === "upfront_399") m.programmeEndUtc = nd.activeUntil;
+    else {
+      // €150×3 ends where Stripe cancels it: 3 calendar months after purchase. activeUntil is the current MONTH's end.
+      const end = new Date(nd.programmeStart);
+      end.setUTCMonth(end.getUTCMonth() + 3);
+      m.programmeEndUtc = end.toISOString();
+      const months = Math.round((new Date(nd.activeUntil).getTime() - new Date(nd.programmeStart).getTime()) / (30.44 * DAY));
+      m.instalmentsPaid = Math.min(3, Math.max(1, months));
+      // The period end is the next charge, unless it is the programme end (no 4th instalment).
+      if (t.stage === "ninety_day_active" && new Date(nd.activeUntil).getTime() < end.getTime() - DAY) {
+        m.nextChargeUtc = nd.activeUntil;
+        const cents = info?.subscription?.plan?.currentPrice;
+        if (cents) m.nextChargeAmount = cents / 100; // €150, or €135 on the referral price
+      }
     }
   } else if (t.ninetyDayCompleted) {
     m.programmeStartUtc = t.ninetyDayCompleted.programmeStart;
@@ -125,8 +134,14 @@ async function careTeam(): Promise<PortalPatient["careTeam"]> {
   return team;
 }
 
+/** Tally forms are per environment; answers only reach the backend of the same environment. */
+export function tallyBase() {
+  if (process.env.BBMI_TALLY_URL) return process.env.BBMI_TALLY_URL.replace(/\/?$/, "/");
+  return /\.qa\./.test(process.env.BBMI_API_URL ?? "") ? "https://survey.qa.beyondbmi.ie/" : "https://survey.beyondbmi.ie/";
+}
+
 function surveyUrlFor(stage: api.TierStage, patientId: string) {
-  const base = (process.env.BBMI_TALLY_URL || "https://survey.beyondbmi.ie/").replace(/\/?$/, "/");
+  const base = tallyBase();
   // Members keep the long intake; everyone else gets the short €89 form (as the current app does).
   const slug = stage === "legacy_member" || stage === "legacy_lapsed" ? "survey" : process.env.BBMI_E89_SURVEY_PATH || "survey";
   return `${base}${slug}?patient_id=${encodeURIComponent(patientId)}`;
@@ -171,7 +186,7 @@ export async function loadBbmiPatient(identity: { sub: string; email: string; gr
     mobile: clean(info?.mobile) ?? clean(me.mobile),
     address: clean(info?.address),
     purchaseUtc: tier.ninetyDay?.programmeStart,
-    doctorReviewDue: !!tier.doctorReview,
+    doctorReviewDue: !!tier.doctorReview?.reviewDue,
   };
 
   const weights = weightsFrom(history.weights);

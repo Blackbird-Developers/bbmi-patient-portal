@@ -19,6 +19,9 @@ const COGNITO_ERRORS: Record<string, string> = {
   "too-many": "Too many attempts. Wait a few minutes and try again.",
   unavailable: "Sign-in is unavailable just now. Try again in a moment.",
   "not-ready": "Your account isn't fully set up yet. Call the care team on +353 1 903 8441 and they'll sort it.",
+  "contact-clinic": "This account needs the care team's help to sign in. Call +353 1 903 8441.",
+  expired: "Your sign-in timed out. Please sign in again.",
+  "record-check": "We need to check your clinic record before you can sign in. Call the care team on +353 1 903 8441.",
 };
 
 async function CognitoLogin({ sp }: { sp: { error?: string; reset?: string; verified?: string } }) {

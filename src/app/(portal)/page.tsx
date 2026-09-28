@@ -32,6 +32,8 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           <Callout tone="positive" title="Welcome to your 90-Day Programme">Your care team has been told. Book your Month 1 appointments below — you can book all of them now.</Callout>
         ) : sp.welcome === "ongoing" ? (
           <Callout tone="positive" title="You're on Ongoing Care">Your first quarterly doctor review can be booked now. Your nurse check-in continues every month.</Callout>
+        ) : sp.welcome === "1" ? (
+          <Callout tone="positive" title="Payment received — setting up your plan">It can take a minute to show here. Refresh shortly if anything looks unchanged.</Callout>
         ) : sp.resumed ? (
           <Callout tone="positive" title="Payment received — your programme has resumed">Booking is open again and your appointments are unchanged.</Callout>
         ) : null}
@@ -43,11 +45,17 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
             <CardHeader title="Pay your missed instalment to resume" sub={m.paymentIssue.since ? `${euro(m.nextChargeAmount ?? 150)} · instalment ${(m.instalmentsPaid ?? 0) + 1} of 3 · unsuccessful since ${fmtDate(m.paymentIssue.since)}` : user.backend?.billingIssue?.amountDue != null ? `${euro(user.backend.billingIssue.amountDue)} due` : undefined} />
             <p className="text-[14px] text-ink-soft">While the programme is paused you can&apos;t book or join appointments. Your appointments and your weight history are kept.</p>
             <div className="mt-4 flex flex-wrap gap-2">
-              <form action={payInstalmentAction}>
-                <Button type="submit" iconLeft={<CreditCard className="size-4" />}>
-                  Pay instalment and resume
-                </Button>
-              </form>
+              {user.backend && !user.backend.billingIssue?.payUrl ? (
+                <ButtonLink href="/care" iconLeft={<CreditCard className="size-4" />}>
+                  Contact the care team
+                </ButtonLink>
+              ) : (
+                <form action={payInstalmentAction}>
+                  <Button type="submit" iconLeft={<CreditCard className="size-4" />}>
+                    Pay instalment and resume
+                  </Button>
+                </form>
+              )}
               <ButtonLink variant="secondary" href="/account/billing">
                 Update card or manage plan
               </ButtonLink>

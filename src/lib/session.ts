@@ -45,8 +45,8 @@ export function openSession(token: string | undefined): SessionData | null {
   if (!token) return null;
   try {
     const [iv, tag, body] = token.split(".").map((p) => Buffer.from(p, "base64url"));
-    if (!iv || !tag || !body) return null;
-    const d = createDecipheriv("aes-256-gcm", key(), iv);
+    if (!iv || !tag || !body || iv.length !== 12 || tag.length !== 16) return null;
+    const d = createDecipheriv("aes-256-gcm", key(), iv, { authTagLength: 16 });
     d.setAuthTag(tag);
     const json = JSON.parse(Buffer.concat([d.update(body), d.final()]).toString("utf8")) as SessionData & { v: number };
     if (json.v !== VERSION || !(json.exp > Date.now()) || !json.sub || !json.refreshToken) return null;
@@ -63,31 +63,40 @@ declare global {
 const cache = () => (globalThis.__portalTokens ??= new Map());
 const inflight = () => (globalThis.__portalRefreshing ??= new Map());
 
+/**
+ * Tokens are cached per SESSION (the refresh token it holds), not per patient,
+ * so a signed-out or copied cookie never picks up another session's live tokens.
+ */
+const sessionKey = (sub: string, refreshToken: string) => `${sub}:${createHash("sha256").update(refreshToken).digest("base64url").slice(0, 22)}`;
+
 export function rememberTokens(sub: string, t: CognitoTokens) {
-  cache().set(sub, t);
+  cache().set(sessionKey(sub, t.refreshToken), t);
 }
 
+/** Drops every cached token of this patient on this server (sign-out, purchase). */
 export function forgetTokens(sub: string) {
-  cache().delete(sub);
+  for (const k of [...cache().keys()]) if (k.startsWith(`${sub}:`)) cache().delete(k);
 }
 
 /** Current tokens for a session, refreshed if they expire within a minute. Null = the session is over. */
 export async function tokensFor(s: SessionData): Promise<CognitoTokens | null> {
-  const t = cache().get(s.sub);
+  const k = sessionKey(s.sub, s.refreshToken);
+  const t = cache().get(k);
   if (t && t.expiresAt - 60_000 > Date.now()) return t;
-  let p = inflight().get(s.sub);
+  let p = inflight().get(k);
   if (!p) {
     p = refreshTokens(s.refreshToken)
       .then((fresh) => {
         if (fresh && decodeJwt<IdClaims>(fresh.idToken).sub === s.sub) {
-          cache().set(s.sub, fresh);
+          // Keep it under the cookie's refresh token even if Cognito rotated it (the cookie still holds the old one).
+          cache().set(k, fresh);
           return fresh;
         }
-        cache().delete(s.sub);
+        cache().delete(k);
         return null;
       })
-      .finally(() => inflight().delete(s.sub));
-    inflight().set(s.sub, p);
+      .finally(() => inflight().delete(k));
+    inflight().set(k, p);
   }
   return p;
 }

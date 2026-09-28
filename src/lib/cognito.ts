@@ -30,7 +30,7 @@ export interface IdClaims {
 export type SignInResult =
   | { kind: "ok"; tokens: CognitoTokens; claims: IdClaims }
   | { kind: "new-password"; session: string }
-  | { kind: "error"; code: "bad-credentials" | "not-confirmed" | "reset-required" | "too-many" | "unavailable"; message: string };
+  | { kind: "error"; code: "bad-credentials" | "not-confirmed" | "reset-required" | "too-many" | "unavailable" | "contact-clinic" | "weak-password" | "expired"; message: string };
 
 function config() {
   const region = process.env.COGNITO_REGION || "eu-west-1";
@@ -54,6 +54,9 @@ function fromSession(s: CognitoUserSession): CognitoTokens {
 
 function mapError(e: unknown): SignInResult {
   const code = (e as { code?: string; name?: string })?.code ?? (e as { name?: string })?.name ?? "";
+  const message = String((e as { message?: string })?.message ?? "");
+  // Disabled accounts and expired temporary passwords need the clinic, not another try.
+  if (code === "NotAuthorizedException" && /disabled|temporary password has expired/i.test(message)) return { kind: "error", code: "contact-clinic", message: "This account needs the care team's help to sign in." };
   if (code === "NotAuthorizedException" || code === "UserNotFoundException") return { kind: "error", code: "bad-credentials", message: "That email and password don't match." };
   if (code === "UserNotConfirmedException") return { kind: "error", code: "not-confirmed", message: "Please verify your email address first." };
   if (code === "PasswordResetRequiredException") return { kind: "error", code: "reset-required", message: "Please reset your password." };
@@ -62,10 +65,13 @@ function mapError(e: unknown): SignInResult {
 }
 
 /** SRP sign-in with email + password. */
+/** The library otherwise keeps every signed-in patient's tokens in one shared in-memory store. */
+const noStorage = { setItem() {}, getItem: () => null, removeItem() {}, clear() {} };
+
 export function signInWithPassword(email: string, password: string): Promise<SignInResult> {
   const { userPoolId, clientId } = config();
-  const pool = new CognitoUserPool({ UserPoolId: userPoolId, ClientId: clientId });
-  const user = new CognitoUser({ Username: email.trim().toLowerCase(), Pool: pool });
+  const pool = new CognitoUserPool({ UserPoolId: userPoolId, ClientId: clientId, Storage: noStorage });
+  const user = new CognitoUser({ Username: email.trim().toLowerCase(), Pool: pool, Storage: noStorage });
   return new Promise((resolve) => {
     user.authenticateUser(new AuthenticationDetails({ Username: email.trim().toLowerCase(), Password: password }), {
       onSuccess: (s) => {
@@ -120,10 +126,13 @@ export async function completeNewPassword(email: string, session: string, newPas
   try {
     const r = await cognitoApi<AuthResult>("RespondToAuthChallenge", { ClientId: clientId, ChallengeName: "NEW_PASSWORD_REQUIRED", Session: session, ChallengeResponses: { USERNAME: email.trim().toLowerCase(), NEW_PASSWORD: newPassword } });
     const a = r.AuthenticationResult;
-    if (!a?.RefreshToken) return { kind: "error", code: "unavailable", message: "Please sign in again." };
+    if (!a?.RefreshToken) return { kind: "error", code: "expired", message: "Please sign in again." };
     const tokens = { idToken: a.IdToken, accessToken: a.AccessToken, refreshToken: a.RefreshToken, expiresAt: Date.now() + a.ExpiresIn * 1000 };
     return { kind: "ok", tokens, claims: decodeJwt<IdClaims>(tokens.idToken) };
   } catch (e) {
+    const c = (e as { code?: string }).code;
+    if (c === "InvalidPasswordException" || c === "InvalidParameterException") return { kind: "error", code: "weak-password", message: "Use at least 8 characters with upper and lower case letters, a number and a symbol." };
+    if (c === "NotAuthorizedException" || c === "CodeMismatchException" || c === "ExpiredCodeException") return { kind: "error", code: "expired", message: "Your sign-in timed out. Sign in again." };
     return mapError(e);
   }
 }
@@ -141,18 +150,21 @@ export async function startPasswordReset(email: string): Promise<{ ok: boolean; 
   }
 }
 
-export async function finishPasswordReset(email: string, code: string, newPassword: string): Promise<{ ok: true } | { ok: false; message: string }> {
+export type ResetError = "code" | "expired" | "weak-password" | "too-many" | "unavailable";
+export type VerifyError = "expired" | "too-many" | "unavailable";
+
+export async function finishPasswordReset(email: string, code: string, newPassword: string): Promise<{ ok: true } | { ok: false; code: ResetError }> {
   const { clientId } = config();
   try {
     await cognitoApi("ConfirmForgotPassword", { ClientId: clientId, Username: email.trim().toLowerCase(), ConfirmationCode: code.trim(), Password: newPassword });
     return { ok: true };
   } catch (e) {
     const c = (e as { code?: string }).code;
-    if (c === "CodeMismatchException") return { ok: false, message: "That code isn't right. Check the email and try again." };
-    if (c === "ExpiredCodeException") return { ok: false, message: "That code has expired. Ask for a new one." };
-    if (c === "InvalidPasswordException") return { ok: false, message: "Use at least 8 characters with upper and lower case letters, a number and a symbol." };
-    if (c === "LimitExceededException" || c === "TooManyRequestsException") return { ok: false, message: "Too many attempts. Wait a few minutes and try again." };
-    return { ok: false, message: "We couldn't reset your password just now. Try again in a moment." };
+    if (c === "CodeMismatchException") return { ok: false, code: "code" };
+    if (c === "ExpiredCodeException") return { ok: false, code: "expired" };
+    if (c === "InvalidPasswordException" || c === "InvalidParameterException") return { ok: false, code: "weak-password" };
+    if (c === "LimitExceededException" || c === "TooManyRequestsException") return { ok: false, code: "too-many" };
+    return { ok: false, code: "unavailable" };
   }
 }
 
@@ -163,7 +175,7 @@ export async function revokeRefreshToken(refreshToken: string) {
 }
 
 /** Confirms the email address from the emailed /verify link. */
-export async function confirmEmail(email: string, code: string): Promise<{ ok: true } | { ok: false; message: string }> {
+export async function confirmEmail(email: string, code: string): Promise<{ ok: true } | { ok: false; code: VerifyError }> {
   const { clientId } = config();
   try {
     await cognitoApi("ConfirmSignUp", { ClientId: clientId, Username: email.trim().toLowerCase(), ConfirmationCode: code.trim() });
@@ -171,9 +183,9 @@ export async function confirmEmail(email: string, code: string): Promise<{ ok: t
   } catch (e) {
     const c = (e as { code?: string }).code;
     // Expired, already confirmed and unknown all look alike on purpose: never reveal whether an account exists.
-    if (c === "ExpiredCodeException" || c === "CodeMismatchException" || c === "NotAuthorizedException") return { ok: false, message: "This link has expired or was already used. Try signing in, or ask for a new link." };
-    if (c === "LimitExceededException" || c === "TooManyRequestsException") return { ok: false, message: "Too many attempts. Wait a few minutes and try again." };
-    return { ok: false, message: "We couldn't verify your email just now. Try again in a moment." };
+    if (c === "ExpiredCodeException" || c === "CodeMismatchException" || c === "NotAuthorizedException") return { ok: false, code: "expired" };
+    if (c === "LimitExceededException" || c === "TooManyRequestsException") return { ok: false, code: "too-many" };
+    return { ok: false, code: "unavailable" };
   }
 }
 

@@ -57,6 +57,8 @@ export interface PatientProfile {
   };
   /** Named labels in Semble — the portal may read plan labels from here in a Semble-only world */
   labels?: string[];
+  /** custom patient numbers by name, e.g. { "BBMI ID": "<sub>" } */
+  numbers?: Record<string, string>;
 }
 
 export interface NewPatient {

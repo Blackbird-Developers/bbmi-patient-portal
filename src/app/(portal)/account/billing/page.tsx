@@ -54,11 +54,17 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
               />
               <p className="text-[14px] text-ink-soft">{m.paymentIssue!.message} While the programme is paused you can&apos;t book or join appointments. Your appointments and your weight history are kept.</p>
               <div className="mt-4 flex flex-wrap gap-2">
-                <form action={payInstalmentAction}>
-                  <Button type="submit" iconLeft={<CreditCard className="size-4" />}>
-                    Pay instalment and resume
-                  </Button>
-                </form>
+                {live && !user.backend?.billingIssue?.payUrl ? (
+                  <ButtonLink href="/care" iconLeft={<CreditCard className="size-4" />}>
+                    Contact the care team
+                  </ButtonLink>
+                ) : (
+                  <form action={payInstalmentAction}>
+                    <Button type="submit" iconLeft={<CreditCard className="size-4" />}>
+                      Pay instalment and resume
+                    </Button>
+                  </form>
+                )}
                 {portalButton("Update card")}
               </div>
               <p className="mt-3 text-[12px] text-muted">This opens the open invoice — you are never charged twice or asked to start a new plan.</p>

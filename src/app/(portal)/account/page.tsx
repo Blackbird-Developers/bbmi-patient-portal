@@ -27,6 +27,9 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
         <div className="space-y-6">
           {sp.saved === "1" ? <Callout tone="positive" title="Contact details saved">Your clinical record has been updated too.</Callout> : null}
           {sp.saved === "prefs" ? <Callout tone="positive" title="Preferences saved" /> : null}
+          {sp.error === "delivery-address" ? (
+            <Callout tone="warn" title="Saved to your clinical record — but not your delivery address">Your details are updated for the care team, but we couldn&apos;t update the address used for medication delivery. Call the care team so they can fix it.</Callout>
+          ) : null}
           {sp.error === "contact-partial" ? (
             <Callout tone="warn" title="Your address was saved, but your mobile number wasn't">Check the number and try again, or call the care team if it keeps happening.</Callout>
           ) : null}

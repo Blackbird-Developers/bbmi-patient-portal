@@ -15,7 +15,7 @@ export default async function SetPasswordPage({ searchParams }: { searchParams: 
   return (
     <AuthShell title="Choose your password" lead={`First sign-in for ${email}.`}>
       <form action={setPasswordAction} className="mt-8 space-y-4">
-        <Field label="New password" htmlFor="password" hint="At least 8 characters, with upper and lower case letters, a number and a symbol." error={sp.error ? decodeURIComponent(sp.error) : undefined}>
+        <Field label="New password" htmlFor="password" hint="At least 8 characters, with upper and lower case letters, a number and a symbol." error={sp.error === "weak-password" ? "Use at least 8 characters with upper and lower case letters, a number and a symbol." : undefined}>
           <Input id="password" name="password" type="password" autoComplete="new-password" required minLength={8} />
         </Field>
         <Button type="submit" className="w-full" size="lg">

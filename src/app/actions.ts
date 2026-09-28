@@ -108,10 +108,13 @@ export async function bookAction(formData: FormData) {
   const patientNotes = String(formData.get("notes") ?? "") || undefined;
   const typeSlug = String(formData.get("typeSlug") ?? "");
   if (u.backend) {
-    // The Beyond BMI booking rules, enforced here because Semble won't (see lib/portal/gates.ts).
+    // The Beyond BMI booking rules, enforced here because Semble won't (see lib/portal/gates.ts) — the same checks
+    // the booking page shows, run against the effective stage, so a replayed request can't get past them.
     const [j, types] = await Promise.all([loadJourney(u), semble.listAppointmentTypes()]);
     const type = types.find((t) => t.id === appointmentTypeId);
-    if (!type || !bookingGate(u, j.upcoming, type).ok) redirect(`/book/${typeSlug}${programmeStepId ? `?step=${programmeStepId}` : ""}`);
+    const back = `/book/${typeSlug}${programmeStepId ? `?step=${programmeStepId}` : ""}`;
+    if (!type || type.slug !== typeSlug || !j.can.book) redirect(back);
+    if (!bookingGate(u, { state: j.state, upcoming: j.upcoming, programme: j.programme }, type, { programmeStepId, startUtc }).ok) redirect(back);
   }
   let bookedId: string;
   try {
@@ -149,6 +152,11 @@ export async function rescheduleAction(formData: FormData) {
   const u = await requireUser();
   const appointmentId = String(formData.get("appointmentId"));
   const typeSlug = String(formData.get("typeSlug") ?? "");
+  if (u.backend) {
+    const j = await loadJourney(u);
+    const own = j.upcoming.find((a) => a.id === appointmentId);
+    if (!own || !bookingGate(u, { state: j.state, upcoming: j.upcoming, programme: j.programme }, own.type, { rescheduleId: appointmentId }).ok) redirect("/appointments?error=move");
+  }
   let id: string;
   try {
     const a = await getSemble().reschedule(u.semblePatientId, {
@@ -183,7 +191,7 @@ export async function billingPortalAction() {
   redirect(url);
 }
 /** Beyond BMI mode: hosted Stripe Checkout (or the Billing Portal) from the backend; activation arrives by webhook. */
-async function tierCheckout(tier: "ninety_450" | "ninety_399" | "ongoing_150" | "ongoing_75"): Promise<never> {
+async function tierCheckout(tier: "e89" | "ninety_450" | "ninety_399" | "ongoing_150" | "ongoing_75"): Promise<never> {
   const token = await accessToken();
   if (!token) redirect("/login");
   let url: string | undefined;
@@ -200,6 +208,13 @@ async function tierCheckout(tier: "ninety_450" | "ninety_399" | "ongoing_150" | 
   }
   if (!url) redirect("/plans?error=checkout");
   redirect(url);
+}
+
+/** No plan yet (stage "none"): the €89 specialist consultation, through the backend's checkout. */
+export async function consultCheckoutAction() {
+  const u = await requireUser();
+  if (!u.backend) redirect("/plans");
+  await tierCheckout("e89");
 }
 
 export async function upgradeAction(formData: FormData) {

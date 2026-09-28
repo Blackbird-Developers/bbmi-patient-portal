@@ -20,7 +20,8 @@ export interface TierStatus {
   ninetyDayCompleted?: { variant: "installments_450" | "upfront_399"; programmeStart: string; completedAt: string };
   billingIssue?: { status: "past_due" | "unpaid" | "incomplete" | "payment_paused"; amountDueCents?: number; currency?: string; hostedInvoiceUrl?: string };
   lapsed?: { status: string; endedAt: string };
-  doctorReview?: { due?: boolean; dueAt?: string; [k: string]: unknown };
+  /** Present for every legacy member while DOCTOR_REVIEW_MONTHS is set — prompt only when reviewDue. */
+  doctorReview?: { reviewDue: boolean; lastDoctorAppointmentAt: string | null; hasUpcomingDoctorEvent: boolean; monthsWindow: number };
 }
 
 export interface Me {

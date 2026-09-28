@@ -1,7 +1,7 @@
 import { requireUser } from "@/lib/auth";
 import { loadJourney } from "@/lib/portal/journey";
 import { PLANS } from "@/lib/portal/store";
-import { continueAction, upgradeAction } from "@/app/actions";
+import { consultCheckoutAction, continueAction, payInstalmentAction, upgradeAction } from "@/app/actions";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Callout } from "@/components/ui/callout";
@@ -170,6 +170,21 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
         ) : null}
       </>
     );
+  } else if (j.state === "legacy_lapsed" && user.backend) {
+    // Beyond BMI mode: an unpaid membership settles its open invoice; anything else restarts through the care team.
+    const payUrl = user.backend.billingIssue?.payUrl;
+    body = (
+      <Card tone="notice">
+        <CardHeader title={payUrl ? "Settle your membership payment" : "Restart your membership"} sub="Your history, results and documents are kept." />
+        {payUrl ? (
+          <form action={payInstalmentAction}>
+            <Button type="submit">Pay and continue</Button>
+          </form>
+        ) : (
+          <ButtonLink href="/care">Talk to the care team</ButtonLink>
+        )}
+      </Card>
+    );
   } else if (j.state === "legacy_lapsed") {
     body = (
       <Card tone="notice">
@@ -177,6 +192,16 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
         <form action={continueAction}>
           <input type="hidden" name="plan" value="ongoing-150" />
           <Button type="submit">Continue · €150/month</Button>
+        </form>
+      </Card>
+    );
+  } else if (j.state === "none" && user.backend?.canPurchaseConsult) {
+    body = (
+      <Card>
+        <CardHeader eyebrow="Start here" title="Specialist consultation" sub="€89 once" />
+        <p className="mb-4 text-[14px] text-ink-soft">A 25-minute video consultation with an obesity doctor: your history, your goals, and whether medication is right for you. Nothing further to pay unless you choose the next stage.</p>
+        <form action={consultCheckoutAction}>
+          <Button type="submit">Pay €89 and book</Button>
         </form>
       </Card>
     );

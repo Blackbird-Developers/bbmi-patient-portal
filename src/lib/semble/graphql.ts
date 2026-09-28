@@ -300,6 +300,7 @@ export class GraphqlSembleAdapter implements SembleAdapter {
       address: p.address && (p.address.address || p.address.city || p.address.postcode) ? { line1: p.address.address ?? undefined, city: p.address.city ?? undefined, postcode: p.address.postcode ?? undefined, country: fromCountryCode(p.address.country) } : undefined,
       communicationPreferences: p.communicationPreferences ?? undefined,
       labels: p.labels?.map((l) => l.text),
+      numbers: Object.fromEntries((p.numbers ?? []).filter((n) => n.name && n.value).map((n) => [n.name, n.value])),
     };
   }
 
@@ -321,8 +322,9 @@ export class GraphqlSembleAdapter implements SembleAdapter {
       `query PatientsByNumber($s: String) { patients(search: $s, pagination:{page:1,pageSize:50}) { data { id numbers { name value } } } }`,
       { s: value },
     );
-    const hits = [...new Set(d.patients.data.filter((p) => p.numbers?.some((n) => n.name === numberName && n.value === value)).map((p) => p.id))];
-    if (hits.length > 1) throw new SembleAdapterError(`More than one Semble patient has ${numberName} ${value}`, "upstream");
+    // Semble ids are Mongo ObjectIds, so sorting orders them by creation: duplicates always resolve to the oldest.
+    const hits = [...new Set(d.patients.data.filter((p) => p.numbers?.some((n) => n.name === numberName && n.value === value)).map((p) => p.id))].sort();
+    if (hits.length > 1) console.error(`Semble: ${hits.length} patients carry ${numberName} ${value}; using the oldest (${hits[0]}). Merge the others in Semble.`);
     return hits[0] ? this.getPatient(hits[0]) : null;
   }
 

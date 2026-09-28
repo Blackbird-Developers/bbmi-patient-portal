@@ -47,7 +47,7 @@ export default async function BookPage({ params, searchParams }: { params: Promi
   else if (j.programme?.locked) locked = { title: "Booking is paused", body: j.bookingLockedReason ?? "Pay your missed instalment to resume.", href: "/account/billing", label: "Billing" };
   if (!locked) {
     // Beyond BMI rules (survey, weight, plan groups, one appointment per role) — the same check the booking action runs.
-    const gate = bookingGate(user, j.upcoming, type, reschedule?.id);
+    const gate = bookingGate(user, { state: j.state, upcoming: j.upcoming, programme: j.programme }, type, { rescheduleId: reschedule?.id, programmeStepId: sp.step });
     if (!gate.ok) locked = gate;
   }
 

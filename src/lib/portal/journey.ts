@@ -78,7 +78,9 @@ function headline(p: PortalPatient, v: { state: MemberState; nextAppointment?: A
     case "consult_booked":
       return { title: "Your consultation is booked", body: v.nextAppointment ? "We'll send a reminder the day before and an hour before. Join from here when it's time." : "", ctaLabel: "See appointment", ctaHref: "/appointments", tone: "default" };
     case "consult_done":
-      return { title: `Good to see you, ${first}`, body: "Your consultation is complete and your treatment plan is with your doctor. Keep the weekly weigh-in going.", tone: "default" };
+      return p.backend && !p.backend.canUpgrade
+        ? { title: `Good to see you, ${first}`, body: "Your consultation is complete. Your care team will be in touch about your treatment plan and what comes next.", tone: "default" }
+        : { title: `Good to see you, ${first}`, body: "Your consultation is complete and your treatment plan is with your doctor. Keep the weekly weigh-in going.", tone: "default" };
     case "ninety_day_active":
       return { title: `Day ${v.programmeDay} of 90`, body: v.weight.changeKg < 0 ? `${Math.abs(v.weight.changeKg).toFixed(1)} kg down since you started. Keep the weekly weigh-in going — it's the habit that matters most.` : "Your programme is under way. Weekly weigh-ins and your monthly appointments are what matter most.", tone: "default" };
     case "ninety_day_overdue":
@@ -113,12 +115,19 @@ async function buildJourney(user: PortalPatient, nowUtc = new Date().toISOString
 
   const m = user.membership;
   let state = m.state;
-  // Beyond BMI derives "consultation booked" from its own calendar, which Semble bookings don't reach yet.
-  if (user.backend && state === "consult_paid" && live.some((a) => a.type.slug === "specialist-consultation" && a.status !== "no-show")) state = "consult_booked";
+  // Beyond BMI derives the consultation stages from its own calendar, which Semble bookings don't reach yet:
+  // a completed Semble consultation is "done", a confirmed one is "booked". (Upgrading still needs the backend to agree.)
+  if (user.backend && (state === "consult_paid" || state === "consult_booked")) {
+    const consults = live.filter((a) => a.type.slug === "specialist-consultation");
+    if (consults.some((a) => a.status === "completed")) state = "consult_done";
+    else if (consults.some((a) => a.status === "confirmed" || a.status === "pending")) state = "consult_booked";
+  }
   const isNinetyDay = state === "ninety_day_active" || state === "ninety_day_overdue";
   let programme: JourneyView["programme"];
   if (isNinetyDay && m.programmeStartUtc && m.programmeEndUtc) {
-    const steps = buildProgrammeView(m, appointments, nowUtc);
+    let steps = buildProgrammeView(m, appointments, nowUtc);
+    // Beyond BMI allows one pending appointment per role: the next same-role step waits until the earlier one has happened.
+    if (user.backend) steps = steps.map((s) => (s.status === "book-now" && upcoming.some((a) => a.type.role === s.role) ? { ...s, status: "locked" as const } : s));
     const prog = programmeProgress(steps);
     const day = Math.max(1, Math.floor((now.getTime() - new Date(m.programmeStartUtc).getTime()) / 86_400_000) + 1);
     programme = { steps, day, total: 90, pct: Math.min(100, Math.round((day / 90) * 100)), done: prog.done, locked: state === "ninety_day_overdue", startUtc: m.programmeStartUtc, endUtc: m.programmeEndUtc };
@@ -133,7 +142,11 @@ async function buildJourney(user: PortalPatient, nowUtc = new Date().toISOString
   if (state === "ninety_day_overdue") bookingLockedReason = "Booking is paused until your missed instalment is paid. Appointments you've already booked are kept.";
   if (state === "legacy_lapsed") bookingLockedReason = "Booking is paused while your membership isn't active.";
   if (state === "consult_paid" && !questionnaireDone) bookingLockedReason = "Complete your health questionnaire to unlock booking.";
-  if (state === "consult_done") bookingLockedReason = "Your €89 consultation is complete. Start your 90-Day Programme to book with the care team.";
+  if (state === "consult_done") bookingLockedReason = user.backend && !user.backend.canUpgrade ? "Your consultation is complete. Your care team will be in touch about your next steps." : "Your €89 consultation is complete. Start your 90-Day Programme to book with the care team.";
+  // The questionnaire gate also applies to joining (it used to sit in the video-token service).
+  const joinBlockedBySurvey = !!user.backend && user.backend.groups.includes("survey") && !user.backend.surveyDone;
+  // Tasks follow the effective stage (a Semble booking completes "book your consultation").
+  const tasks = user.onboarding.map((t) => (t.id === "book" && state !== "consult_paid" ? { ...t, done: true, dueLabel: undefined } : t));
 
   return {
     user,
@@ -143,18 +156,19 @@ async function buildJourney(user: PortalPatient, nowUtc = new Date().toISOString
     upcoming,
     past,
     programme,
-    tasks: user.onboarding,
-    openTasks: user.onboarding.filter((t) => !t.done).length,
+    tasks,
+    openTasks: tasks.filter((t) => !t.done).length,
     weight,
     prescriptions,
     activePrescription: prescriptions[0],
     careTeam,
     can: {
       book: bookable.has(state) && !(state === "consult_paid" && !questionnaireDone) && state !== "consult_done",
-      join: state !== "ninety_day_overdue" && state !== "legacy_lapsed",
+      join: state !== "ninety_day_overdue" && state !== "legacy_lapsed" && !joinBlockedBySurvey,
       seePrescriptions: prescriptions.length > 0,
-      upgradeTo90Day: state === "consult_done",
-      chooseOngoing: state === "ninety_day_completed",
+      // With the Beyond BMI backend, only offer what its checkout will accept.
+      upgradeTo90Day: state === "consult_done" && (!user.backend || user.backend.canUpgrade),
+      chooseOngoing: state === "ninety_day_completed" && (!user.backend || user.backend.canChooseOngoing),
       adHoc: m.entitlements.includes("ad-hoc-sessions"),
       community: m.entitlements.includes("community"),
     },

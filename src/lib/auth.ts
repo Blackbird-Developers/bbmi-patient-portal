@@ -9,6 +9,7 @@ import type { MemberState, PortalPatient } from "./portal/types";
 import { completeNewPassword, decodeJwt, revokeRefreshToken, signInWithPassword, type CognitoTokens, type SignInResult } from "./cognito";
 import { forgetTokens, openSession, rememberTokens, sealSession, SESSION_COOKIE, SESSION_MAX_AGE_S, tokensFor, type SessionData } from "./session";
 import { AccountNotReady, loadBbmiPatient } from "./bbmi/patient";
+import { SembleLinkConflict } from "./semble/link";
 import { getMe } from "./bbmi/api";
 import { BbmiError } from "./bbmi/client";
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
@@ -103,9 +104,21 @@ export function authMode(): "cognito" | "demo" {
 
 declare global {
   var __portalPatients: Map<string, { at: number; patient: PortalPatient }> | undefined;
+  var __portalPatientLoads: Map<string, Promise<PortalPatient>> | undefined;
+  var __portalGroupRefresh: Map<string, number> | undefined;
 }
 const patientCache = () => (globalThis.__portalPatients ??= new Map());
+/** The layout and the page render at the same time: one load per patient, shared, so Semble linking runs once. */
+const patientLoads = () => (globalThis.__portalPatientLoads ??= new Map());
+const groupRefreshAt = () => (globalThis.__portalGroupRefresh ??= new Map());
 const PATIENT_TTL_MS = 15_000;
+
+/** Groups each paid stage must carry; if the token lacks them, the plan changed since the token was minted. */
+function groupsLag(stage: string, groups: string[]) {
+  if (stage.startsWith("consult_")) return !groups.includes("doctor");
+  if (stage === "ninety_day_active") return !groups.includes("dietician") && !groups.includes("health-coach");
+  return false;
+}
 
 /** Drop the cached patient after anything that changes it (weight logged, address saved, purchase). */
 export function invalidatePatient(sub: string) {
@@ -124,17 +137,37 @@ export async function accessToken(): Promise<string | null> {
   return (await tokensFor(s))?.accessToken ?? null;
 }
 
+async function loadFor(s: SessionData): Promise<PortalPatient | null> {
+  let tokens = await tokensFor(s);
+  if (!tokens) return null;
+  const load = (t: CognitoTokens) => loadBbmiPatient({ sub: s.sub, email: s.email, groups: decodeJwt<{ "cognito:groups"?: string[] }>(t.accessToken)["cognito:groups"] ?? [] }, t.accessToken);
+  let patient = await load(tokens);
+  // After a purchase the backend grants groups, but only a fresh token carries them. Refresh once (at most every 5 min).
+  if (groupsLag(patient.membership.state, patient.backend?.groups ?? []) && Date.now() - (groupRefreshAt().get(s.sub) ?? 0) > 5 * 60_000) {
+    groupRefreshAt().set(s.sub, Date.now());
+    forgetTokens(s.sub);
+    tokens = await tokensFor(s);
+    if (tokens) patient = await load(tokens);
+  }
+  return patient;
+}
+
 async function cognitoUser(): Promise<PortalPatient | null> {
   const s = await cognitoSession();
   if (!s) return null;
-  const tokens = await tokensFor(s);
-  if (!tokens) return null;
   const hit = patientCache().get(s.sub);
   if (hit && Date.now() - hit.at < PATIENT_TTL_MS) return hit.patient;
-  const claims = decodeJwt<{ "cognito:groups"?: string[] }>(tokens.accessToken);
-  const patient = await loadBbmiPatient({ sub: s.sub, email: s.email, groups: claims["cognito:groups"] ?? [] }, tokens.accessToken);
-  patientCache().set(s.sub, { at: Date.now(), patient });
-  return patient;
+  let p = patientLoads().get(s.sub);
+  if (!p) {
+    p = loadFor(s)
+      .then((patient) => {
+        if (patient) patientCache().set(s.sub, { at: Date.now(), patient });
+        return patient as PortalPatient;
+      })
+      .finally(() => patientLoads().delete(s.sub));
+    patientLoads().set(s.sub, p);
+  }
+  return (await p) ?? null;
 }
 
 async function startCognitoSession(tokens: CognitoTokens, sub: string, email: string) {
@@ -151,14 +184,15 @@ function sealChallenge(v: { email: string; session: string }) {
   const k = challengeKey();
   const iv = randomBytes(12);
   const c = createCipheriv("aes-256-gcm", k, iv);
-  const body = Buffer.concat([c.update(JSON.stringify({ ...v, exp: Date.now() + 5 * 60_000 }), "utf8"), c.final()]);
+  const body = Buffer.concat([c.update(JSON.stringify({ ...v, exp: Date.now() + 3 * 60_000 }), "utf8"), c.final()]);
   return [iv, c.getAuthTag(), body].map((b) => b.toString("base64url")).join(".");
 }
 function openChallenge(t?: string): { email: string; session: string } | null {
   if (!t) return null;
   try {
     const [iv, tag, body] = t.split(".").map((p) => Buffer.from(p, "base64url"));
-    const d = createDecipheriv("aes-256-gcm", challengeKey(), iv);
+    if (!iv || !tag || !body || iv.length !== 12 || tag.length !== 16) return null;
+    const d = createDecipheriv("aes-256-gcm", challengeKey(), iv, { authTagLength: 16 });
     d.setAuthTag(tag);
     const v = JSON.parse(Buffer.concat([d.update(body), d.final()]).toString("utf8")) as { email: string; session: string; exp: number };
     return v.exp > Date.now() ? { email: v.email, session: v.session } : null;
@@ -170,12 +204,12 @@ function challengeKey() {
   return createHmac("sha256", process.env.PORTAL_SESSION_SECRET ?? "").update("bbmi-portal-challenge").digest();
 }
 
-export type CognitoSignIn = { ok: true } | { ok: false; code: "bad-credentials" | "not-confirmed" | "reset-required" | "too-many" | "unavailable" | "not-ready" | "new-password" };
+export type CognitoSignIn = { ok: true } | { ok: false; code: "bad-credentials" | "not-confirmed" | "reset-required" | "too-many" | "unavailable" | "not-ready" | "new-password" | "contact-clinic" | "weak-password" | "expired" };
 
 async function finishSignIn(r: SignInResult, email: string): Promise<CognitoSignIn> {
   if (r.kind === "new-password") {
     const jar = await cookies();
-    jar.set(CHALLENGE_COOKIE, sealChallenge({ email, session: r.session }), { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 300 });
+    jar.set(CHALLENGE_COOKIE, sealChallenge({ email, session: r.session }), { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 180 });
     return { ok: false, code: "new-password" };
   }
   if (r.kind === "error") return { ok: false, code: r.code };
@@ -203,7 +237,7 @@ export async function pendingChallengeEmail(): Promise<string | null> {
 export async function completeChallenge(newPassword: string): Promise<CognitoSignIn> {
   const jar = await cookies();
   const c = openChallenge(jar.get(CHALLENGE_COOKIE)?.value);
-  if (!c) return { ok: false, code: "unavailable" };
+  if (!c) return { ok: false, code: "expired" };
   const r = await completeNewPassword(c.email, c.session, newPassword);
   if (r.kind === "ok") jar.delete(CHALLENGE_COOKIE);
   return finishSignIn(r, c.email);
@@ -239,6 +273,7 @@ export async function requireUser(): Promise<PortalPatient> {
     u = await currentUser();
   } catch (e) {
     if (e instanceof AccountNotReady) redirect("/login?error=not-ready");
+    if (e instanceof SembleLinkConflict) redirect("/login?error=record-check");
     throw e;
   }
   if (!u) redirect("/login");

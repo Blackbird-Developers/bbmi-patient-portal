@@ -108,6 +108,11 @@ export default async function AppointmentsPage({ searchParams }: { searchParams:
               The clinic system didn&apos;t answer in time, so it may or may not have gone through. Check the list below before trying again — or call the care team on +353 1 903 8441.
             </Callout>
           ) : null}
+          {sp.error === "move" ? (
+            <Callout tone="warn" title="That appointment can't be moved online">
+              Call the care team on +353 1 903 8441 and they will help.
+            </Callout>
+          ) : null}
           {sp.error === "cancel" ? (
             <Callout tone="warn" title="We couldn't cancel that online">
               Your appointment is still booked. Call the care team on +353 1 903 8441 and they will cancel it for you.

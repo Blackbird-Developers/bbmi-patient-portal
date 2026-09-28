@@ -7,6 +7,12 @@ import { Field, Input } from "@/components/ui/field";
 
 export const dynamic = "force-dynamic";
 
+const VERIFY_ERRORS: Record<string, string> = {
+  expired: "This link has expired or was already used. Try signing in, or ask for a new link.",
+  "too-many": "Too many attempts. Wait a few minutes and try again.",
+  unavailable: "We couldn't verify your email just now. Try again in a moment.",
+};
+
 /** Target of the verification email: /verify?email=<e>&accessCode=<code> (Cognito CustomEmailSender). */
 export default async function VerifyPage({ searchParams }: { searchParams: Promise<{ email?: string; accessCode?: string; error?: string; resent?: string }> }) {
   const sp = await searchParams;
@@ -18,19 +24,21 @@ export default async function VerifyPage({ searchParams }: { searchParams: Promi
         <Field label="Email address" htmlFor="email">
           <Input id="email" name="email" type="email" autoComplete="email" required defaultValue={email} />
         </Field>
-        <Field label="Code" htmlFor="code" error={sp.error ? decodeURIComponent(sp.error) : undefined}>
+        <Field label="Code" htmlFor="code" error={sp.error ? VERIFY_ERRORS[sp.error] ?? VERIFY_ERRORS.unavailable : undefined}>
           <Input id="code" name="code" inputMode="numeric" autoComplete="one-time-code" required defaultValue={sp.accessCode ?? ""} className="tabular" />
         </Field>
         <Button type="submit" className="w-full" size="lg">
           Verify email
         </Button>
-      </form>
-      <form action={resendVerificationAction} className="mt-3 flex items-center justify-between text-[13px]">
-        <input type="hidden" name="email" value={email} />
-        <button className="text-blue-text hover:underline">Send a new link</button>
-        <Link className="text-blue-text hover:underline" href="/login">
-          Sign in
-        </Link>
+        <div className="flex items-center justify-between text-[13px]">
+          {/* Uses the email typed above, even when the page was opened without one. */}
+          <button formAction={resendVerificationAction} formNoValidate className="text-blue-text hover:underline">
+            Send a new link
+          </button>
+          <Link className="text-blue-text hover:underline" href="/login">
+            Sign in
+          </Link>
+        </div>
       </form>
     </AuthShell>
   );

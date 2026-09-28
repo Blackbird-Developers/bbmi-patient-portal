@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { requireUser } from "@/lib/auth";
+import { invalidatePatient, requireUser } from "@/lib/auth";
 import { submitFormAction } from "@/app/actions";
 import { FORMS, SAMPLE_INTAKE_ANSWERS } from "../catalog";
 import { FormRenderer } from "../form-renderer";
@@ -10,13 +10,14 @@ import { StatusTag } from "@/components/ui/status-tag";
 import { fmtDateYear, nowMs } from "@/lib/format";
 import { CheckCircle2 } from "lucide-react";
 import type { PortalPatient } from "@/lib/portal/types";
+import { tallyBase } from "@/lib/bbmi/patient";
 import { AutoRefresh, TallyEmbed } from "../tally-embed";
 
 /** Beyond BMI's Tally forms (answers go to its backend by signed webhook). */
 function tallyForm(user: PortalPatient, slug: string): { src: string; title: string; intro: string; done: boolean } | null {
   const b = user.backend;
   if (!b) return null;
-  const base = (process.env.BBMI_TALLY_URL || "https://survey.beyondbmi.ie/").replace(/\/?$/, "/");
+  const base = tallyBase();
   const pid = `?patient_id=${encodeURIComponent(user.userId)}`;
   if (slug === "intake") return { src: b.surveyUrl, title: "Health questionnaire", intro: "About 8 minutes. Your doctor reads it before you meet.", done: b.surveyDone };
   if (slug === "ess-eq5d") return { src: `${base}ess-eq5d${pid}`, title: "Sleep & quality of life", intro: "Two short questionnaires your care team repeats every two months.", done: !b.essDue };
@@ -27,7 +28,12 @@ function tallyForm(user: PortalPatient, slug: string): { src: string; title: str
 export default async function FormPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ done?: string; submitted?: string }> }) {
   const { slug } = await params;
   const sp = await searchParams;
-  const user = await requireUser();
+  let user = await requireUser();
+  if (user.backend && sp.submitted) {
+    // The answers reach the backend by webhook a moment after Tally says "submitted": read fresh, not the 15-second cache.
+    invalidatePatient(user.userId);
+    user = await requireUser();
+  }
   if (user.backend) {
     const t = tallyForm(user, slug);
     if (!t) notFound();

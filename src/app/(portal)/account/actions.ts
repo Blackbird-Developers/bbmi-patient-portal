@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSemble, SembleAdapterError } from "@/lib/semble";
-import { accessToken, invalidatePatient, requireUser } from "@/lib/auth";
+import { accessToken, changePassword, invalidatePatient, requireUser, signOutEverywhere } from "@/lib/auth";
 import { addAddress } from "@/lib/bbmi/api";
 
 export async function updateContactAction(formData: FormData) {
@@ -18,7 +18,7 @@ export async function updateContactAction(formData: FormData) {
     country: "Ireland",
   };
   try {
-    await getSemble().updatePatientContact(u.semblePatientId, { phone, address });
+    if (u.semblePatientId) await getSemble().updatePatientContact(u.semblePatientId, { phone, address });
     if (u.backend && address.line1 && address.city && address.postcode) {
       // Beyond BMI keeps its own copy (prescription delivery, the pre-consult checklist). It can only ADD addresses
       // (at most 6, then 409), so only send one that differs from what it already has.
@@ -42,6 +42,7 @@ export async function updateContactAction(formData: FormData) {
 
 export async function updatePreferencesAction(formData: FormData) {
   const u = await requireUser();
+  if (!u.semblePatientId) redirect("/account?error=prefs");
   try {
     await getSemble().updatePatientContact(u.semblePatientId, {
       communicationPreferences: {
@@ -56,4 +57,18 @@ export async function updatePreferencesAction(formData: FormData) {
   }
   revalidatePath("/account");
   redirect("/account?saved=prefs");
+}
+
+export async function changePasswordAction(formData: FormData) {
+  await requireUser();
+  const next = String(formData.get("password") ?? "");
+  if (next !== String(formData.get("confirm") ?? "")) redirect("/account/password?error=mismatch");
+  const r = await changePassword(String(formData.get("current") ?? ""), next);
+  if (!r.ok) redirect(`/account/password?error=${r.code}`);
+  redirect("/account?saved=password");
+}
+
+export async function signOutEverywhereAction() {
+  await signOutEverywhere();
+  redirect("/login");
 }

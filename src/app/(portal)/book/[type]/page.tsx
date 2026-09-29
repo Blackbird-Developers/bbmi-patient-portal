@@ -78,7 +78,7 @@ export default async function BookPage({ params, searchParams }: { params: Promi
 
   /* ---------- data for the picker ---------- */
   const roleClinicians = allClinicians.filter((c) => hasRole(c, type.role));
-  const usualId = user.careTeam[type.role];
+  const usualId = j.careTeamByRole[type.role];
   const clinicians: PickerClinician[] = roleClinicians.map((c) => ({ id: c.id, firstName: c.firstName, lastName: c.lastName, display: clinicianDisplay(c), isCareTeam: c.id === usualId }));
   const slots = locked ? [] : await semble.getAvailability({ appointmentTypeId: type.id, fromUtc: earliest.toISOString(), toUtc: rangeEnd.toISOString(), excludeAppointmentId: reschedule?.id });
   const pickerType: PickerType = {
@@ -88,8 +88,9 @@ export default async function BookPage({ params, searchParams }: { params: Promi
     durationMinutes: type.durationMinutes,
     roleLabel: ROLE_LABEL[type.role] ?? type.role,
     format: type.slug === "nurse-call" ? "phone" : "video",
-    priceLabel: type.price > 0 ? euro(type.price) : "Included in your plan",
-    priceNote: type.price > 0 ? "billed to your card at booking" : undefined,
+    // With the Beyond BMI backend, payment is the plan's (Stripe), never taken at booking — ignore Semble product prices.
+    priceLabel: user.backend || type.price <= 0 ? "Included in your plan" : euro(type.price),
+    priceNote: !user.backend && type.price > 0 ? "billed to your card at booking" : undefined,
   };
   const questionnaireDone = j.state === "consult_paid" ? !user.onboarding.some((t) => t.id === "questionnaire" && !t.done) : undefined;
 
@@ -127,6 +128,7 @@ export default async function BookPage({ params, searchParams }: { params: Promi
         </Card>
       ) : (
         <SlotPicker
+          reminders={!user.backend}
           slots={slots}
           clinicians={clinicians}
           type={pickerType}

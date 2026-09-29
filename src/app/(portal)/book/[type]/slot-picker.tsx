@@ -44,6 +44,8 @@ export interface PickerType {
 }
 
 export interface SlotPickerProps {
+  /** the demo's reminder schedule; Beyond BMI mode leaves reminders to Semble */
+  reminders?: boolean;
   slots: PickerSlot[];
   clinicians: PickerClinician[];
   type: PickerType;
@@ -135,7 +137,7 @@ interface Selected {
 }
 
 /* ------------------------------------------------------------------ component */
-export function SlotPicker({ slots, clinicians, type, rangeStartUtc, rangeEndUtc, initialClinicianId, initialDate, programmeStepId, reschedule, questionnaireDone, nextRangeHref, windowNote, action }: SlotPickerProps) {
+export function SlotPicker({ slots, clinicians, type, rangeStartUtc, rangeEndUtc, initialClinicianId, initialDate, programmeStepId, reschedule, questionnaireDone, nextRangeHref, windowNote, action, reminders = true }: SlotPickerProps) {
   const cells = useMemo(() => buildCells(rangeStartUtc, rangeEndUtc), [rangeStartUtc, rangeEndUtc]);
   const weeks = useMemo(() => chunk(cells, 7), [cells]);
   const clinicianById = useMemo(() => new Map(clinicians.map((c) => [c.id, c])), [clinicians]);
@@ -441,7 +443,7 @@ export function SlotPicker({ slots, clinicians, type, rangeStartUtc, rangeEndUtc
 
           <ConfirmButton label={confirmLabel} disabled={!selected} className="mt-4 hidden w-full lg:inline-flex" />
 
-          <p className="mt-3 text-[12px] leading-relaxed text-muted">24 hours&apos; notice to reschedule or cancel · reminders the day before and 1 hour before · video link arrives by email and appears here</p>
+          <p className="mt-3 text-[12px] leading-relaxed text-muted">24 hours&apos; notice to reschedule or cancel · {reminders ? "reminders the day before and 1 hour before · video link arrives by email and appears here" : "the video link appears here"}</p>
         </Card>
       </aside>
 

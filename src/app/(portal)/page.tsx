@@ -64,7 +64,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           </Card>
         ) : null}
 
-        {j.nextAppointment ? <NextAppointmentCard a={j.nextAppointment} canJoin={j.can.join} locked={!j.can.join ? "Joining is paused until your payment is resolved." : undefined} /> : null}
+        {j.nextAppointment ? <NextAppointmentCard a={j.nextAppointment} canJoin={j.can.join} locked={!j.can.join ? "Joining is paused until your payment is resolved." : undefined} reminders={!user.backend} /> : null}
 
         {j.state !== "consult_paid" ? <WeightCard w={j.weight} /> : null}
 

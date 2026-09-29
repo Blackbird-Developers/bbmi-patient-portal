@@ -6,7 +6,7 @@ import { getSemble, sembleMode, SembleAdapterError } from "./semble";
 import { hasRole, type ClinicianRole } from "./semble/types";
 import { getPortalPatient, findUserByEmail, linkSemblePatient, LINKABLE_STAGES } from "./portal/store";
 import type { MemberState, PortalPatient } from "./portal/types";
-import { completeNewPassword, decodeJwt, revokeRefreshToken, signInWithPassword, type CognitoTokens, type SignInResult } from "./cognito";
+import { changePassword as cognitoChangePassword, completeNewPassword, decodeJwt, globalSignOut, revokeRefreshToken, signInWithPassword, type CognitoTokens, type SignInResult } from "./cognito";
 import { forgetTokens, openSession, rememberTokens, sealSession, SESSION_COOKIE, SESSION_MAX_AGE_S, tokensFor, type SessionData } from "./session";
 import { AccountNotReady, loadBbmiPatient } from "./bbmi/patient";
 import { SembleLinkConflict } from "./semble/link";
@@ -241,6 +241,19 @@ export async function completeChallenge(newPassword: string): Promise<CognitoSig
   const r = await completeNewPassword(c.email, c.session, newPassword);
   if (r.kind === "ok") jar.delete(CHALLENGE_COOKIE);
   return finishSignIn(r, c.email);
+}
+
+export async function changePassword(previous: string, proposed: string) {
+  const token = await accessToken();
+  if (!token) return { ok: false as const, code: "unavailable" as const };
+  return cognitoChangePassword(token, previous, proposed);
+}
+
+/** Signs this patient out on every device (Cognito GlobalSignOut), then here. */
+export async function signOutEverywhere() {
+  const token = await accessToken();
+  if (token) await globalSignOut(token);
+  await signOut();
 }
 
 /** After a purchase: new Cognito groups only appear in a fresh access token. */

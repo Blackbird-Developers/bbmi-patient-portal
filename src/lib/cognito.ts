@@ -193,3 +193,32 @@ export async function resendVerification(email: string) {
   const { clientId } = config();
   await cognitoApi("ResendConfirmationCode", { ClientId: clientId, Username: email.trim().toLowerCase() }).catch(() => undefined);
 }
+
+/** Changes the password of the signed-in patient (needs their current one). */
+export async function changePassword(accessToken: string, previous: string, proposed: string): Promise<{ ok: true } | { ok: false; code: "wrong-password" | "weak-password" | "too-many" | "unavailable" }> {
+  try {
+    await cognitoApi("ChangePassword", { AccessToken: accessToken, PreviousPassword: previous, ProposedPassword: proposed });
+    return { ok: true };
+  } catch (e) {
+    const c = (e as { code?: string }).code;
+    if (c === "NotAuthorizedException") return { ok: false, code: "wrong-password" };
+    if (c === "InvalidPasswordException" || c === "InvalidParameterException") return { ok: false, code: "weak-password" };
+    if (c === "LimitExceededException" || c === "TooManyRequestsException") return { ok: false, code: "too-many" };
+    return { ok: false, code: "unavailable" };
+  }
+}
+
+/** Revokes every refresh token of this patient (all devices). Issued access tokens still live until they expire (1 h). */
+/** False only when Cognito says the token is revoked or invalid (e.g. after a global sign-out); network trouble counts as valid. */
+export async function accessTokenValid(accessToken: string): Promise<boolean> {
+  try {
+    await cognitoApi("GetUser", { AccessToken: accessToken });
+    return true;
+  } catch (e) {
+    return (e as { code?: string }).code !== "NotAuthorizedException";
+  }
+}
+
+export async function globalSignOut(accessToken: string) {
+  await cognitoApi("GlobalSignOut", { AccessToken: accessToken }).catch(() => undefined);
+}

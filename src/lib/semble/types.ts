@@ -74,6 +74,18 @@ export interface IntakeSubmission {
   allergies: string[];
 }
 
+/** A weight Beyond BMI's backend holds, to be mirrored into the Semble record. */
+export interface WeightLogEntry {
+  /** Beyond BMI's weight row id */
+  id: string;
+  /** noon UTC on the measurement day */
+  dateUtc: string;
+  kg: number;
+  source: "patient" | "clinician";
+  /** when the backend received it (a weight can be entered after its measurement day) */
+  createdUtc?: string;
+}
+
 export interface NewPatient {
   firstName: string;
   lastName: string;
@@ -81,6 +93,8 @@ export interface NewPatient {
   dob?: string; // YYYY-MM-DD
   phone?: string;
   gender?: string;
+  /** Beyond BMI's formatted one-line address, kept as Semble's free-text address line */
+  address?: string;
   /** custom patient numbers to set on creation, e.g. { "BBMI ID": "<sub>" } */
   numbers?: Record<string, string>;
 }

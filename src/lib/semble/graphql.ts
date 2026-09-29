@@ -12,6 +12,7 @@ import {
   type ClinicianRole,
   type DocumentContent,
   type IntakeSubmission,
+  type WeightLogEntry,
   type Invoice,
   type NewPatient,
   type PatientDocument,
@@ -69,9 +70,9 @@ type RawBooking = {
   appointment?: { id: string; title?: string | null; duration?: number | null } | null;
   patientId?: string | null;
   metadata?: Meta;
-  bookingJourney?: { dna?: string | null } | null;
+  bookingJourney?: { arrived?: string | null; consultation?: string | null; departed?: string | null; dna?: string | null } | null;
 };
-const BOOKING_FIELDS = "id start end deleted status comments videoUrl patientId doctor { id fullName } appointment { id title duration } metadata { key value } bookingJourney { dna }";
+const BOOKING_FIELDS = "id start end deleted status comments videoUrl patientId doctor { id fullName } appointment { id title duration } metadata { key value } bookingJourney { arrived consultation departed dna }";
 
 type Room = { id: string; name: string; services: Set<string> };
 type Window = { clinicianId: string; roomId: string; start: number; end: number };
@@ -313,7 +314,7 @@ export class GraphqlSembleAdapter implements SembleAdapter {
       { s: e },
     );
     const hits = [...new Set(d.patients.data.filter((p) => p.email?.trim().toLowerCase() === e).map((p) => p.id))];
-    if (hits.length > 1) throw new SembleAdapterError("More than one Semble patient has this email", "upstream");
+    if (hits.length > 1) throw new SembleAdapterError("More than one Semble patient has this email", "duplicate");
     return hits[0] ? this.getPatient(hits[0]) : null;
   }
 
@@ -372,6 +373,7 @@ export class GraphqlSembleAdapter implements SembleAdapter {
           ...(input.dob ? { dob: input.dob } : {}),
           ...(input.gender ? { gender: input.gender } : {}),
           ...(input.phone ? { phoneType: "Mobile", phoneNumber: input.phone } : {}),
+          ...(input.address ? { address: input.address.slice(0, 500) } : {}),
           country: "IE",
           communicationPreferences: { receiveEmail: true, receiveSMS: false, promotionalMarketing: false },
         },
@@ -383,46 +385,135 @@ export class GraphqlSembleAdapter implements SembleAdapter {
     return this.getPatient(id);
   }
 
-  async recordIntake(patientId: string, intake: IntakeSubmission): Promise<{ written: boolean }> {
-    const MARKER = "Beyond BMI questionnaire";
-    const cur = await this.gql<{ patient: null | { customAttributes?: { id?: string | null; title?: string | null; response?: string | null }[] | null } }>(
-      `query IntakeMarker($id: ID!) { patient(id: $id) { customAttributes { id title response } } }`,
+  /* Portal bookkeeping lives in patient custom attributes (staff can see them under the patient's details). */
+  private async attribute(patientId: string, title: string) {
+    const d = await this.gql<{ patient: null | { customAttributes?: { id?: string | null; title?: string | null; response?: string | null }[] | null } }>(
+      `query PortalMarker($id: ID!) { patient(id: $id) { customAttributes { id title response } } }`,
       { id: patientId },
     );
-    if (!cur.patient) throw new SembleAdapterError("Patient not found", "not-found");
-    const marker = cur.patient.customAttributes?.find((a) => a.title === MARKER);
+    if (!d.patient) throw new SembleAdapterError("Patient not found", "not-found");
+    const a = d.patient.customAttributes?.find((x) => x.title === title);
+    return a?.id ? { id: a.id, response: a.response ?? "" } : null;
+  }
+
+  private async setAttribute(patientId: string, existingId: string | undefined, title: string, text: string, response: string): Promise<string> {
+    const r = existingId
+      ? await this.gql<{ updatePatientAttribute: { data: { id: string } | null; error?: string | null } }>(
+          `mutation PortalMark($p: ID!, $a: ID!, $d: UpdateCustomAttributeData!) { updatePatientAttribute(patientId: $p, attributeId: $a, attributeData: $d) { data { id } error } }`,
+          { p: patientId, a: existingId, d: { response } },
+        ).then((x) => x.updatePatientAttribute)
+      : await this.gql<{ addPatientAttribute: { data: { id: string } | null; error?: string | null } }>(
+          `mutation PortalMarkNew($p: ID!, $d: AddCustomAttributeData!) { addPatientAttribute(patientId: $p, attributeData: $d) { data { id } error } }`,
+          { p: patientId, d: { title, text, response } },
+        ).then((x) => x.addPatientAttribute);
+    if (!r.data) throw new SembleAdapterError(r.error || "Could not save the portal marker", "upstream");
+    if (existingId) return existingId;
+    // addPatientAttribute answers with the patient, not the attribute: read the new attribute's id back.
+    const created = await this.attribute(patientId, title);
+    if (!created) throw new SembleAdapterError("The portal marker was not saved", "upstream");
+    return created.id;
+  }
+
+  private async freeText(patientId: string, consultationId: string | undefined, sectionTitle: string, question: string, answer: string): Promise<string> {
+    const r = await this.gql<{ createFreeTextRecord: { data: { id: string; consultationId?: string | null } | null; error?: string | null } }>(
+      `mutation PortalRecord($d: CreateFreeTextRecordDataInput!) { createFreeTextRecord(recordData: $d) { data { id consultationId } error } }`,
+      { d: { patientId, ...(consultationId ? { consultationId } : {}), sectionTitle, question: question.slice(0, 500), answer: answer.slice(0, 4000) } },
+    );
+    const c = r.createFreeTextRecord.data?.consultationId;
+    if (!r.createFreeTextRecord.data || !c) throw new SembleAdapterError(r.createFreeTextRecord.error || "Could not save the record", "upstream");
+    // The record exists even if Semble filed it elsewhere: callers carry on with the consultation it names.
+    if (consultationId && c !== consultationId) console.warn(`Semble: a record meant for consultation ${consultationId} was filed in ${c}`);
+    return c;
+  }
+
+  async recordIntake(patientId: string, intake: IntakeSubmission): Promise<{ written: boolean }> {
+    const MARKER = "Beyond BMI questionnaire";
+    const marker = await this.attribute(patientId, MARKER);
     if (marker?.response === intake.fingerprint) return { written: false };
+    // "pending:<fingerprint>:<consultation>:<started ms>" = a copy in progress. Another server may still be writing it,
+    // so it only counts as abandoned after a few minutes; then its partial consultation is removed.
+    const pending = /^pending:[^:]+:([^:]+)(?::(\d+))?$/.exec(marker?.response ?? "");
+    if (pending && Date.now() - Number(pending[2] ?? 0) < 5 * 60_000) return { written: false };
+    const stale = pending?.[1];
+    if (stale) {
+      const del = await this.gql<{ deleteConsultation: { data: { id: string } | null; error?: string | null } }>(
+        `mutation IntakeDiscard($p: ID!, $c: String!) { deleteConsultation(patientId: $p, consultationId: $c) { data { id } error } }`,
+        { p: patientId, c: stale },
+      ).catch(() => null);
+      if (!del?.deleteConsultation.data) console.warn(`Semble: could not remove the partial questionnaire copy ${stale} for patient ${patientId}`);
+    }
 
     // The first record opens the questionnaire consultation; everything else is filed in it.
-    const first = await this.gql<{ createFreeTextRecord: { data: { consultationId?: string | null } | null; error?: string | null } }>(
-      `mutation IntakeOpen($d: CreateFreeTextRecordDataInput!) { createFreeTextRecord(recordData: $d) { data { consultationId } error } }`,
-      { d: { patientId, sectionTitle: intake.title, question: "Source", answer: "Completed by the patient in the Beyond BMI patient portal" } },
-    );
-    const consultationId = first.createFreeTextRecord.data?.consultationId;
-    if (!consultationId) throw new SembleAdapterError(first.createFreeTextRecord.error || "Could not start the questionnaire record", "upstream");
+    const consultationId = await this.freeText(patientId, undefined, intake.title, "Source", "Completed by the patient in the Beyond BMI patient portal");
+    const mine = `pending:${intake.fingerprint}:${consultationId}:${Date.now()}`;
+    const markerId = await this.setAttribute(patientId, marker?.id, MARKER, "Last questionnaire copied from the patient portal", mine);
     for (const section of intake.sections) {
-      for (const item of section.items) {
-        const r = await this.gql<{ createFreeTextRecord: { data: { id: string } | null; error?: string | null } }>(
-          `mutation IntakeItem($d: CreateFreeTextRecordDataInput!) { createFreeTextRecord(recordData: $d) { data { id } error } }`,
-          { d: { patientId, consultationId, sectionTitle: section.title, question: item.question.slice(0, 500), answer: item.answer.slice(0, 4000) } },
-        );
-        if (!r.createFreeTextRecord.data) throw new SembleAdapterError(r.createFreeTextRecord.error || "Could not save a questionnaire answer", "upstream");
-      }
+      for (const item of section.items) await this.freeText(patientId, consultationId, section.title, item.question, item.answer);
     }
     for (const allergen of intake.allergies) {
-      await this.gql(
+      const r = await this.gql<{ createAllergyRecord: { data: { id: string } | null; error?: string | null } }>(
         `mutation IntakeAllergy($d: CreateAllergyRecordDataInput!) { createAllergyRecord(recordData: $d) { data { id } error } }`,
         { d: { patientId, consultationId, sectionTitle: intake.title, allergen: allergen.slice(0, 200), allergyIntoleranceType: "allergy", comments: "Reported by the patient in the health questionnaire" } },
       );
+      if (!r.createAllergyRecord.data) throw new SembleAdapterError(r.createAllergyRecord.error || "Could not save an allergy", "upstream");
     }
-    // Marked last, so an interrupted copy is retried on the next load.
-    if (marker?.id) {
-      await this.gql(`mutation IntakeMark($p: ID!, $a: ID!, $d: UpdateCustomAttributeData!) { updatePatientAttribute(patientId: $p, attributeId: $a, attributeData: $d) { data { id } error } }`, { p: patientId, a: marker.id, d: { response: intake.fingerprint } });
-    } else {
-      await this.gql(`mutation IntakeMarkNew($p: ID!, $d: AddCustomAttributeData!) { addPatientAttribute(patientId: $p, attributeData: $d) { data { id } error } }`, { p: patientId, d: { title: MARKER, text: "Last questionnaire copied from the patient portal", response: intake.fingerprint } });
+    // Two servers started together: the marker holds the later run, so the earlier one removes its copy.
+    const now = await this.attribute(patientId, MARKER);
+    if (now?.response !== mine) {
+      await this.gql(`mutation IntakeYield($p: ID!, $c: String!) { deleteConsultation(patientId: $p, consultationId: $c) { data { id } error } }`, { p: patientId, c: consultationId }).catch(() => null);
+      return { written: false };
     }
+    // Marked complete last: until then the marker says "pending", and a later load starts over cleanly.
+    await this.setAttribute(patientId, markerId, MARKER, "", intake.fingerprint);
     return { written: true };
   }
+
+  async syncWeights(patientId: string, weights: WeightLogEntry[]): Promise<{ written: number }> {
+    const MARKER = "Beyond BMI weight log";
+    const SECTION = "Weight log (Beyond BMI)";
+    // Progress is kept by when the backend RECEIVED each weight (so a backdated entry is still copied):
+    // the weight-log consultation, the latest receipt time copied and the ids copied at that time.
+    const at = (w: WeightLogEntry) => w.createdUtc ?? w.dateUtc;
+    type State = { c?: string; since: string; ids: string[] };
+    const marker = await this.attribute(patientId, MARKER);
+    const sorted = [...weights].sort((a, b) => at(a).localeCompare(at(b)));
+    const last = sorted[sorted.length - 1];
+    const baseline = (): State => (last ? { since: at(last), ids: sorted.filter((w) => at(w) === at(last)).map((w) => w.id) } : { since: "", ids: [] });
+    if (!marker) {
+      // First sight of an existing record: earlier weights are migrated history, not the portal's to copy.
+      // (A record the portal creates is baselined empty at creation, so everything is copied.)
+      await this.setAttribute(patientId, undefined, MARKER, "Weights copied from the patient portal (bookkeeping — leave as is)", JSON.stringify(baseline()));
+      return { written: 0 };
+    }
+    let state: State;
+    try {
+      const saved = JSON.parse(marker.response || "{}") as Partial<State>;
+      if (typeof saved.since !== "string") throw new Error("old format");
+      state = { c: saved.c, since: saved.since, ids: saved.ids ?? [] };
+    } catch {
+      state = baseline(); // unreadable: re-baseline rather than copy everything again
+    }
+    const fresh = sorted.filter((w) => at(w) > state.since || (at(w) === state.since && !state.ids.includes(w.id)));
+    let written = 0;
+    for (const w of fresh) {
+      const when = new Date(w.dateUtc).toLocaleDateString("en-IE", { day: "numeric", month: "short", year: "numeric", timeZone: "Europe/Dublin" });
+      const answer = `${w.kg.toFixed(1)} kg on ${when} — ${w.source === "clinician" ? "entered by the clinic" : "reported by the patient"} in Beyond BMI`;
+      let c: string;
+      try {
+        c = await this.freeText(patientId, state.c, SECTION, "Weight", answer);
+      } catch (e) {
+        // Only a definite refusal (e.g. the log consultation was deleted) is retried in a new consultation;
+        // a timeout may have written it, so stop and let the next load decide.
+        if (!state.c || !(e instanceof SembleAdapterError && e.code === "upstream")) throw e;
+        c = await this.freeText(patientId, undefined, SECTION, "Weight", answer);
+      }
+      state = { c, since: at(w), ids: at(w) === state.since ? [...state.ids, w.id] : [w.id] };
+      await this.setAttribute(patientId, marker.id, MARKER, "", JSON.stringify(state));
+      written++;
+    }
+    return { written };
+  }
+
 
   async updatePatientContact(patientId: string, patch: Partial<Pick<PatientProfile, "phone" | "address" | "communicationPreferences">>): Promise<PatientProfile> {
     const patientData: Record<string, unknown> = {};
@@ -492,7 +583,15 @@ export class GraphqlSembleAdapter implements SembleAdapter {
     const known = ref.types.find((t) => t.id === typeId);
     // A booking staff made with a type the portal doesn't offer still shows its real name and length.
     const type = known ?? { id: typeId, name: b.appointment?.title || "Appointment", slug: "appointment", role: clinician.role, durationMinutes: b.appointment?.duration ?? Math.round((new Date(endUtc).getTime() - new Date(startUtc).getTime()) / 60_000), price: 0, requiresPayment: false };
-    const status: Appointment["status"] = b.deleted || b.status === "failed" ? "cancelled" : b.bookingJourney?.dna ? "no-show" : b.status === "pending" || b.status === "processing" ? "pending" : new Date(endUtc).getTime() < Date.now() ? "completed" : "confirmed";
+    // Attendance comes from Semble's patient journey: "did not attend" wins whenever staff set it (even days later).
+    // Without it, an appointment that has ended counts as attended (arrived / in consultation / departed, or no flag).
+    const ended = new Date(endUtc).getTime() < Date.now();
+    const status: Appointment["status"] =
+      b.deleted || b.status === "failed" ? "cancelled"
+      : b.bookingJourney?.dna ? "no-show"
+      : ended ? "completed"
+      : b.status === "pending" || b.status === "processing" ? "pending"
+      : "confirmed";
     const changeable = status === "confirmed" && new Date(startUtc).getTime() > Date.now() + CHANGE_CUTOFF_MS;
     return {
       id: b.id,

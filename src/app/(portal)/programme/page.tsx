@@ -84,6 +84,8 @@ function IncludesCard({ planId, title }: { planId: "ninety-day-upfront" | "ongoi
 function ActiveProgramme({ j }: { j: JourneyView & { programme: NonNullable<JourneyView["programme"]> } }) {
   const p = j.programme;
   const m = j.user.membership;
+  // Beyond BMI mode pays the open Stripe invoice; without its link only the care team can help.
+  const payable = !j.user.backend || !!j.user.backend.billingIssue?.payUrl;
   const month = Math.min(3, Math.max(1, Math.ceil(p.day / 30)));
   const daysLeft = Math.max(0, daysBetween(new Date().toISOString(), p.endUtc));
   const alloc = allocation(p.steps);
@@ -97,11 +99,17 @@ function ActiveProgramme({ j }: { j: JourneyView & { programme: NonNullable<Jour
             title="Your programme is paused"
             action={
               <>
-                <form action={payInstalmentAction}>
-                  <Button type="submit" size="sm" iconLeft={<CreditCard className="size-4" />}>
-                    Pay instalment and resume
-                  </Button>
-                </form>
+                {payable ? (
+                  <form action={payInstalmentAction}>
+                    <Button type="submit" size="sm" iconLeft={<CreditCard className="size-4" />}>
+                      Pay instalment and resume
+                    </Button>
+                  </form>
+                ) : (
+                  <ButtonLink href="/care" size="sm" iconLeft={<CreditCard className="size-4" />}>
+                    Contact the care team
+                  </ButtonLink>
+                )}
                 <ButtonLink href="/account/billing" size="sm" variant="secondary">
                   Update card
                 </ButtonLink>

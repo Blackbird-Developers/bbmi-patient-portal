@@ -26,16 +26,18 @@ const RX_STATUS: Record<Prescription["status"], { s: Status; label: string }> = 
   cancelled: { s: "cancelled", label: "Cancelled" },
 };
 
-function Tracker({ rx }: { rx: Prescription }) {
+function Tracker({ rx, live }: { rx: Prescription; live: boolean }) {
   const reached = rx.status === "dispensed" ? 3 : rx.status === "sent" ? 2 : 1;
-  const steps = [
+  // Semble reports "issued" and "sent to pharmacy" only; collection, delivery and run-out dates aren't known to it.
+  const all = [
     { t: "Issued", sub: fmtDate(rx.issuedAtUtc) },
     { t: `Sent to ${rx.fulfilment?.pharmacyName ?? "your pharmacy"}`, sub: reached >= 2 ? "Done" : "Pending" },
     { t: rx.fulfilment?.method === "home-delivery" ? "Dispatched to you" : "Ready to collect", sub: rx.fulfilment?.dispatchedAtUtc ? fmtDate(rx.fulfilment.dispatchedAtUtc) : reached >= 3 ? "Done" : "Within 2 working days" },
     { t: "Runs out", sub: rx.reviewDueUtc ? `~${fmtDate(rx.reviewDueUtc)}` : "—" },
   ];
+  const steps = live ? all.slice(0, 2) : all;
   return (
-    <ol className="mt-4 grid grid-cols-4 gap-1">
+    <ol className={cn("mt-4 grid gap-1", steps.length === 2 ? "grid-cols-2" : "grid-cols-4")}>
       {steps.map((s, i) => {
         const on = i < reached;
         return (
@@ -72,7 +74,7 @@ export default async function PrescriptionsPage() {
 
   return (
     <>
-      <PageHeader title="Prescriptions" sub="Prescriptions are issued by your doctor and go straight to the pharmacy — you never have to carry one. Each is tracked here, from issued to dispensed." />
+      <PageHeader title="Prescriptions" sub={user.backend ? "Prescriptions are issued by your doctor and go straight to the pharmacy — you never have to carry one. Each is tracked here." : "Prescriptions are issued by your doctor and go straight to the pharmacy — you never have to carry one. Each is tracked here, from issued to dispensed."} />
 
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
         {/* ---------------- main ---------------- */}
@@ -99,13 +101,16 @@ export default async function PrescriptionsPage() {
                     ))}
                   </ul>
 
-                  <Tracker rx={rx} />
+                  <Tracker rx={rx} live={!!user.backend} />
 
-                  <p className="mt-4 text-[12px] text-muted">
-                    <Package className="mr-1 inline size-3.5 text-blue-text" />
-                    {rx.fulfilment?.method === "home-delivery" ? `Home delivery by ${rx.fulfilment.pharmacyName ?? "your pharmacy"}` : `Collect from ${rx.fulfilment?.pharmacyName ?? "your pharmacy"}`}
-                    {rx.fulfilment?.dispatchedAtUtc ? ` · dispatched ${relativeDay(rx.fulfilment.dispatchedAtUtc)}` : ""}
-                  </p>
+                  {/* Semble records the pharmacy, not whether it is collected or delivered. */}
+                  {!user.backend || rx.fulfilment?.pharmacyName ? (
+                    <p className="mt-4 text-[12px] text-muted">
+                      <Package className="mr-1 inline size-3.5 text-blue-text" />
+                      {user.backend ? `Pharmacy: ${rx.fulfilment?.pharmacyName}` : rx.fulfilment?.method === "home-delivery" ? `Home delivery by ${rx.fulfilment.pharmacyName ?? "your pharmacy"}` : `Collect from ${rx.fulfilment?.pharmacyName ?? "your pharmacy"}`}
+                      {rx.fulfilment?.dispatchedAtUtc ? ` · dispatched ${relativeDay(rx.fulfilment.dispatchedAtUtc)}` : ""}
+                    </p>
+                  ) : null}
 
                   {i === 0 ? (
                     <p className="mt-2 flex items-start gap-1.5 text-[11.5px] text-muted">
@@ -131,15 +136,18 @@ export default async function PrescriptionsPage() {
         <aside className="space-y-6">
           {prescriptions.length ? (
             <>
-              <Card>
-                <CardHeader title="Storage" action={<Thermometer className="size-5 text-blue-text" />} />
-                <ul className="space-y-1.5 text-[13.5px] text-ink-soft">
-                  <li>Keep unused pens in the fridge (2–8 °C), in the box.</li>
-                  <li>A pen in use can be kept at room temperature (below 30 °C) for up to 30 days.</li>
-                  <li>Never freeze. Keep away from direct heat and light.</li>
-                </ul>
-                <p className="mt-2 text-[11.5px] text-muted">General pen guidance — the leaflet that comes with your medication takes precedence.</p>
-              </Card>
+              {/* General pen advice isn't signed off by the clinic yet — demo only. */}
+              {!user.backend ? (
+                <Card>
+                  <CardHeader title="Storage" action={<Thermometer className="size-5 text-blue-text" />} />
+                  <ul className="space-y-1.5 text-[13.5px] text-ink-soft">
+                    <li>Keep unused pens in the fridge (2–8 °C), in the box.</li>
+                    <li>A pen in use can be kept at room temperature (below 30 °C) for up to 30 days.</li>
+                    <li>Never freeze. Keep away from direct heat and light.</li>
+                  </ul>
+                  <p className="mt-2 text-[11.5px] text-muted">General pen guidance — the leaflet that comes with your medication takes precedence.</p>
+                </Card>
+              ) : null}
 
               <Card>
                 <CardHeader title="Renewals" sub="Your doctor decides each one" action={<CalendarClock className="size-5 text-blue-text" />} />

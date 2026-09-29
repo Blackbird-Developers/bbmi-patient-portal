@@ -15,7 +15,8 @@ export function joinWindow(a: Appointment, now = Date.now()) {
   return { open: now >= s - JOIN_BEFORE_MS && now <= s + JOIN_AFTER_MS, opensInMin: Math.max(0, Math.ceil((s - JOIN_BEFORE_MS - now) / 60_000)) };
 }
 
-export function NextAppointmentCard({ a, canJoin = true, locked, showManage = true }: { a: Appointment; canJoin?: boolean; locked?: string; showManage?: boolean }) {
+/** reminders: the demo's reminder schedule; Beyond BMI mode leaves reminders to the clinic's Semble settings. */
+export function NextAppointmentCard({ a, canJoin = true, locked, showManage = true, reminders = true }: { a: Appointment; canJoin?: boolean; locked?: string; showManage?: boolean; reminders?: boolean }) {
   const jw = joinWindow(a);
   return (
     <Card>
@@ -65,7 +66,7 @@ export function NextAppointmentCard({ a, canJoin = true, locked, showManage = tr
           </>
         ) : null}
       </div>
-      <p className="mt-3 text-[12px] text-muted">Reschedule or cancel with 24 hours&apos; notice. Reminders go out the day before and 1 hour before.</p>
+      <p className="mt-3 text-[12px] text-muted">Reschedule or cancel with 24 hours&apos; notice.{reminders ? " Reminders go out the day before and 1 hour before." : ""}</p>
     </Card>
   );
 }

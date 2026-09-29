@@ -123,6 +123,8 @@ export interface WeightEntry {
   kg: number;
   note?: string;
   source: "patient" | "clinician";
+  /** Beyond BMI mode: when the backend received it */
+  createdUtc?: string;
 }
 
 /*
@@ -179,6 +181,8 @@ export interface BackendFacts {
   mobile?: string;
   /** formatted address on file, if any */
   address?: string;
+  /** GP on file (from the intake questionnaire) */
+  gp?: { name?: string; email?: string };
   /** 90-day purchase date (BBMI's counting boundary); programmeStartUtc is the Day-20 anchor */
   purchaseUtc?: string;
   doctorReviewDue: boolean;

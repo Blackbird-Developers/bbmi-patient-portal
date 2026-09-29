@@ -30,7 +30,7 @@ export function ContactForm({ action, phone, address }: { action: (formData: For
   return (
     <form action={action} className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Mobile" htmlFor="phone" hint="Used for appointment reminders and 2-step sign-in.">
+        <Field label="Mobile" htmlFor="phone" hint="Used for appointment reminders.">
           <Input id="phone" name="phone" type="tel" defaultValue={phone ?? ""} autoComplete="tel" placeholder="+353 87 000 0000" />
         </Field>
         <div />

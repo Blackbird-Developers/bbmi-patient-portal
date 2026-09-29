@@ -30,7 +30,7 @@ const ICON: Record<DocumentKind, React.ReactNode> = {
 export default async function DocumentsPage({ searchParams }: { searchParams: Promise<{ kind?: string }> }) {
   const sp = await searchParams;
   const user = await requireUser();
-  const docs = await getSemble().listDocuments(user.semblePatientId);
+  const docs = user.semblePatientId ? await getSemble().listDocuments(user.semblePatientId) : [];
   const kind = (KINDS.find((k) => k.key === sp.kind)?.key ?? "all") as DocumentKind | "all";
   const shown = kind === "all" ? docs : docs.filter((d) => d.kind === kind);
 

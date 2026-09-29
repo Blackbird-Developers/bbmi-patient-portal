@@ -1,6 +1,6 @@
 import "server-only";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
-import { refreshTokens, type CognitoTokens, type IdClaims, decodeJwt } from "./cognito";
+import { accessTokenValid, refreshTokens, type CognitoTokens, type IdClaims, decodeJwt } from "./cognito";
 
 /**
  * Cognito session (PORTAL_AUTH=cognito).
@@ -59,9 +59,13 @@ export function openSession(token: string | undefined): SessionData | null {
 declare global {
   var __portalTokens: Map<string, CognitoTokens> | undefined;
   var __portalRefreshing: Map<string, Promise<CognitoTokens | null>> | undefined;
+  var __portalChecked: Map<string, number> | undefined;
 }
 const cache = () => (globalThis.__portalTokens ??= new Map());
 const inflight = () => (globalThis.__portalRefreshing ??= new Map());
+/** When each cached session was last confirmed with Cognito: a "sign out on all devices" elsewhere lands within this. */
+const checked = () => (globalThis.__portalChecked ??= new Map());
+const RECHECK_MS = 5 * 60_000;
 
 /**
  * Tokens are cached per SESSION (the refresh token it holds), not per patient,
@@ -71,6 +75,7 @@ const sessionKey = (sub: string, refreshToken: string) => `${sub}:${createHash("
 
 export function rememberTokens(sub: string, t: CognitoTokens) {
   cache().set(sessionKey(sub, t.refreshToken), t);
+  checked().set(sessionKey(sub, t.refreshToken), Date.now());
 }
 
 /** Drops every cached token of this patient on this server (sign-out, purchase). */
@@ -82,7 +87,14 @@ export function forgetTokens(sub: string) {
 export async function tokensFor(s: SessionData): Promise<CognitoTokens | null> {
   const k = sessionKey(s.sub, s.refreshToken);
   const t = cache().get(k);
-  if (t && t.expiresAt - 60_000 > Date.now()) return t;
+  if (t && t.expiresAt - 60_000 > Date.now()) {
+    if (Date.now() - (checked().get(k) ?? 0) < RECHECK_MS) return t;
+    if (await accessTokenValid(t.accessToken)) {
+      checked().set(k, Date.now());
+      return t;
+    }
+    cache().delete(k); // revoked: the refresh below fails too, which ends the session
+  }
   let p = inflight().get(k);
   if (!p) {
     p = refreshTokens(s.refreshToken)
@@ -90,6 +102,7 @@ export async function tokensFor(s: SessionData): Promise<CognitoTokens | null> {
         if (fresh && decodeJwt<IdClaims>(fresh.idToken).sub === s.sub) {
           // Keep it under the cookie's refresh token even if Cognito rotated it (the cookie still holds the old one).
           cache().set(k, fresh);
+          checked().set(k, Date.now());
           return fresh;
         }
         cache().delete(k);

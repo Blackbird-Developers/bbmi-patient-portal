@@ -1,3 +1,5 @@
+import { notFound } from "next/navigation";
+import { authMode } from "@/lib/auth";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardHeader } from "@/components/ui/card";
 import { StatusTag } from "@/components/ui/status-tag";
@@ -137,6 +139,8 @@ function Diagram() {
 }
 
 export default function ArchitecturePage() {
+  // Internal presenter page for the demo — never shown to real patients.
+  if (authMode() === "cognito") notFound();
   return (
     <div className="mx-auto max-w-[880px] space-y-6">
       <PageHeader eyebrow="Architecture" title="About this prototype" sub="How the new Beyond BMI patient portal fits around Semble, Stripe and HubSpot — and what it would take to ship." />

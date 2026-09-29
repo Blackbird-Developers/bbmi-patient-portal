@@ -14,6 +14,8 @@ declare global {
 export function getSemble(): SembleAdapter {
   if (globalThis.__semble) return globalThis.__semble;
   const mode = process.env.SEMBLE_ADAPTER ?? "mock";
+  // Real patients must never be served from the in-memory demo record.
+  if (process.env.PORTAL_AUTH === "cognito" && mode !== "graphql") throw new Error("PORTAL_AUTH=cognito requires SEMBLE_ADAPTER=graphql");
   globalThis.__semble = mode === "graphql" ? new GraphqlSembleAdapter() : new MockSembleAdapter();
   return globalThis.__semble;
 }

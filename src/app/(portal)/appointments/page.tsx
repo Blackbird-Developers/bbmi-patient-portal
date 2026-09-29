@@ -64,6 +64,7 @@ function emptyUpcomingCopy(j: JourneyView): { title: string; body: string } {
 export default async function AppointmentsPage({ searchParams }: { searchParams: Promise<{ booked?: string; cancelled?: string; rescheduled?: string; error?: string }> }) {
   const sp = await searchParams;
   const user = await requireUser();
+  const payable = !user.backend || !!user.backend.billingIssue?.payUrl;
   const j = await loadJourney(user);
   const adhoc: AppointmentType[] = j.can.adHoc ? (await getSemble().listAppointmentTypes()).filter((t) => t.slug.startsWith("adhoc-")) : [];
 
@@ -78,7 +79,7 @@ export default async function AppointmentsPage({ searchParams }: { searchParams:
     <>
       <PageHeader
         title="Appointments"
-        sub="Video appointments in Dublin time. Reminders go out the day before and 1 hour before."
+        sub={user.backend ? "Video appointments in Dublin time." : "Video appointments in Dublin time. Reminders go out the day before and 1 hour before."}
         actions={
           cta.kind === "link" ? (
             <ButtonLink href={cta.href} iconLeft={<CalendarPlus className="size-4" />}>
@@ -138,11 +139,17 @@ export default async function AppointmentsPage({ searchParams }: { searchParams:
               action={
                 cta.action && "pay" in cta.action ? (
                   <>
-                    <form action={payInstalmentAction}>
-                      <Button type="submit" size="sm" iconLeft={<CreditCard className="size-4" />}>
-                        Pay instalment and resume
-                      </Button>
-                    </form>
+                    {payable ? (
+                      <form action={payInstalmentAction}>
+                        <Button type="submit" size="sm" iconLeft={<CreditCard className="size-4" />}>
+                          Pay instalment and resume
+                        </Button>
+                      </form>
+                    ) : (
+                      <ButtonLink href="/care" size="sm" iconLeft={<CreditCard className="size-4" />}>
+                        Contact the care team
+                      </ButtonLink>
+                    )}
                     <ButtonLink href="/account/billing" size="sm" variant="secondary">
                       Update card
                     </ButtonLink>
@@ -164,7 +171,7 @@ export default async function AppointmentsPage({ searchParams }: { searchParams:
             </h2>
             {first ? (
               <>
-                <NextAppointmentCard a={first} canJoin={j.can.join} locked={lockedMsg} />
+                <NextAppointmentCard a={first} canJoin={j.can.join} locked={lockedMsg} reminders={!user.backend} />
                 {rest.length ? (
                   <Card>
                     <CardHeader title="Also booked" sub={`${rest.length} more`} />
@@ -238,7 +245,7 @@ export default async function AppointmentsPage({ searchParams }: { searchParams:
               </div>
               <div>
                 <dt className="font-medium">Reminders</dt>
-                <dd className="text-ink-soft">Email and SMS the day before and 1 hour before, with the video link.</dd>
+                <dd className="text-ink-soft">{user.backend ? "The clinic emails a confirmation when you book, with the video link." : "Email and SMS the day before and 1 hour before, with the video link."}</dd>
               </div>
               {j.programme ? (
                 <div>

@@ -7,6 +7,7 @@ import type {
   Clinician,
   DocumentContent,
   IntakeSubmission,
+  WeightLogEntry,
   NewPatient,
   Invoice,
   PatientDocument,
@@ -46,6 +47,12 @@ export interface SembleAdapter {
   createPatient(input: NewPatient): Promise<PatientProfile>;
   /** Copies a completed questionnaire into the clinical record once (by fingerprint). */
   recordIntake(patientId: string, intake: IntakeSubmission): Promise<{ written: boolean }>;
+  /**
+   * Mirrors weights into the record's "Weight log" (Semble has no Vitals API). The first call only
+   * sets a baseline — history from before the link is the migration's job — and later calls add
+   * each new weight once.
+   */
+  syncWeights(patientId: string, weights: WeightLogEntry[]): Promise<{ written: number }>;
   updatePatientContact(
     patientId: string,
     patch: Partial<Pick<PatientProfile, "phone" | "address" | "communicationPreferences">>,
@@ -89,6 +96,8 @@ export class SembleAdapterError extends Error {
     message: string,
     public readonly code:
       | "not-found"
+      /** more than one record matches where exactly one must (e.g. two patients with one email) */
+      | "duplicate"
       | "rate-limited"
       | "slot-taken"
       | "unauthorised"

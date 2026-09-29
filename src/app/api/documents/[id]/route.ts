@@ -15,6 +15,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const user = await currentUser();
   if (!user) return new Response("Sign in required", { status: 401 });
   const { id } = await params;
+  if (!user.semblePatientId) return new Response("Not found", { status: 404 });
   try {
     const doc = await getSemble().openDocument(user.semblePatientId, id);
     if (!doc) return new Response("Not found", { status: 404 });

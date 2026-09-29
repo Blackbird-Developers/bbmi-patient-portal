@@ -65,9 +65,11 @@ export function AppShell({ user, children, badges, demoUsers, sembleMode, semble
             <a className="hover:text-ink" href="https://beyondbmi.ie/privacy/">Privacy</a>
             <a className="hover:text-ink" href="https://beyondbmi.ie/terms/">Terms</a>
             <span>Not an emergency or general GP service — in an emergency call 999 or 112.</span>
-            <Link className="ml-auto hover:text-ink" href="/architecture">
-              About this prototype
-            </Link>
+            {demoControls ? (
+              <Link className="ml-auto hover:text-ink" href="/architecture">
+                About this prototype
+              </Link>
+            ) : null}
           </div>
         </footer>
       </div>

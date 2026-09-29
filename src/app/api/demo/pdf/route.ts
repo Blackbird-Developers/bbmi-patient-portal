@@ -31,6 +31,8 @@ function minimalPdf(lines: string[]): Uint8Array {
 }
 
 export async function GET(req: NextRequest) {
+  // Demo-only synthetic PDFs: real patients' documents come from Semble via /api/documents/[id].
+  if (process.env.PORTAL_AUTH === "cognito") return new Response("Not found", { status: 404 });
   const user = await currentUser();
   if (!user) return new Response("Sign in required", { status: 401 });
   const kind = req.nextUrl.searchParams.get("kind") ?? "document";

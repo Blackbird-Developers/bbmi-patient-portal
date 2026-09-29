@@ -2,7 +2,7 @@ import { requireUser } from "@/lib/auth";
 import { getSemble } from "@/lib/semble";
 import { STATE_LABEL } from "@/lib/portal/types";
 import { signOutAction } from "@/app/actions";
-import { updateContactAction, updatePreferencesAction } from "./actions";
+import { signOutEverywhereAction, updateContactAction, updatePreferencesAction } from "./actions";
 import { ContactForm } from "./contact-form";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -17,8 +17,13 @@ import { CreditCard, FileText, Download, ShieldCheck, LogOut } from "lucide-reac
 export default async function AccountPage({ searchParams }: { searchParams: Promise<{ saved?: string; verify?: string; error?: string }> }) {
   const sp = await searchParams;
   const user = await requireUser();
-  const p = await getSemble().getPatient(user.semblePatientId);
+  // No clinical record yet (never bought): show what Beyond BMI holds.
+  const p = user.semblePatientId
+    ? await getSemble().getPatient(user.semblePatientId)
+    : { id: "", reference: undefined, firstName: user.firstName, lastName: user.lastName, email: user.email, dob: user.backend?.dob, phone: user.backend?.mobile, address: undefined, communicationPreferences: undefined };
   const verified = user.userId !== "user-sean";
+  // Beyond BMI mode shows only what is real: no simulated ID check, no unsaved consent toggles, no dead buttons.
+  const live = !!user.backend;
 
   return (
     <>
@@ -27,6 +32,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
         <div className="space-y-6">
           {sp.saved === "1" ? <Callout tone="positive" title="Contact details saved">Your clinical record has been updated too.</Callout> : null}
           {sp.saved === "prefs" ? <Callout tone="positive" title="Preferences saved" /> : null}
+          {sp.saved === "password" ? <Callout tone="positive" title="Password changed" /> : null}
           {sp.error === "delivery-address" ? (
             <Callout tone="warn" title="Saved to your clinical record — but not your delivery address">Your details are updated for the care team, but we couldn&apos;t update the address used for medication delivery. Call the care team so they can fix it.</Callout>
           ) : null}
@@ -36,7 +42,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
           {sp.error === "contact" || sp.error === "prefs" ? (
             <Callout tone="warn" title="We couldn't save that just now">Nothing was changed. Try again in a moment, or call the care team if it keeps happening.</Callout>
           ) : null}
-          {sp.verify ? (
+          {!live && sp.verify ? (
             <Callout tone="info" title="Identity check">
               A quick photo-ID check (passport or driving licence, plus a selfie) is required before any prescription can be issued. It takes about 2 minutes and opens in a secure window. In this prototype the check is simulated.
             </Callout>
@@ -58,10 +64,15 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
                 </div>
               </div>
             </div>
-            <ContactForm action={updateContactAction} phone={p.phone} address={p.address} />
+            {user.semblePatientId ? (
+              <ContactForm action={updateContactAction} phone={p.phone} address={p.address} />
+            ) : (
+              <p className="text-[13.5px] text-ink-soft">You&apos;ll add your mobile and address when you book your consultation.</p>
+            )}
             <p className="mt-3 text-[12px] text-muted">Name, date of birth and email are identity fields — to change them, call or email the care team.</p>
           </Card>
 
+          {!live ? (
           <Card>
             <CardHeader title="Identity verification" sub="Required before any prescription" action={verified ? <StatusTag status="done">Verified</StatusTag> : <StatusTag status="pending">Not yet verified</StatusTag>} />
             <p className="text-[14px] text-ink-soft">{verified ? "Your photo ID was checked and matched. Nothing more to do." : "A 2-minute photo-ID check. Have your passport or driving licence to hand."}</p>
@@ -73,13 +84,15 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
               </div>
             ) : null}
           </Card>
+          ) : null}
 
+          {user.semblePatientId ? (
           <Card>
-            <CardHeader title="Communication preferences" sub="Appointment reminders always go out by email; SMS is optional." />
+            <CardHeader title="Communication preferences" sub={live ? "How the clinic contacts you about appointments and letters." : "Appointment reminders always go out by email; SMS is optional."} />
             <form action={updatePreferencesAction} className="space-y-3">
               {[
                 ["receiveEmail", "Email", "Reminders, confirmations and letters from your care team", p.communicationPreferences?.receiveEmail ?? true],
-                ["receiveSMS", "SMS", "Reminders the day before and 1 hour before appointments", p.communicationPreferences?.receiveSMS ?? true],
+                ["receiveSMS", "SMS", live ? "Appointment reminders by text message" : "Reminders the day before and 1 hour before appointments", p.communicationPreferences?.receiveSMS ?? true],
                 ["promotionalMarketing", "News from Beyond BMI", "Occasional programme updates and webinars — never medication marketing", p.communicationPreferences?.promotionalMarketing ?? false],
               ].map(([name, label, hint, on]) => (
                 <label key={String(name)} className="flex min-h-11 cursor-pointer items-start gap-3 rounded-md px-1 py-1.5 hover:bg-blue-wash">
@@ -95,7 +108,24 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
               </Button>
             </form>
           </Card>
+          ) : null}
 
+          {live ? (
+            <Card>
+              <CardHeader title="Security" />
+              <div className="flex flex-wrap gap-2">
+                <ButtonLink href="/account/password" variant="secondary" size="sm">
+                  Change password
+                </ButtonLink>
+                <form action={signOutEverywhereAction}>
+                  <Button type="submit" variant="ghost" size="sm" iconLeft={<LogOut className="size-4" />}>
+                    Sign out on all devices
+                  </Button>
+                </form>
+              </div>
+              <p className="mt-2 text-[12px] text-muted">Other devices are signed out within 5 minutes.</p>
+            </Card>
+          ) : (
           <Card>
             <CardHeader title="Security" />
             <div className="flex flex-wrap gap-2">
@@ -113,10 +143,19 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
             </div>
             <p className="mt-3 text-[12px] text-muted">Documents, prescriptions and billing ask for a second step when you sign in from a new device.</p>
           </Card>
+          )}
 
           <Card>
             <CardHeader title="Data & privacy" />
             <ul className="space-y-2 text-[14px]">
+              {live ? (
+                <li>
+                  <span className="block font-medium">Your GP</span>
+                  <span className="block text-[13px] text-ink-soft">
+                    {user.backend?.gp?.name || user.backend?.gp?.email ? [user.backend.gp.name, user.backend.gp.email].filter(Boolean).join(" · ") : "Not on file yet — the care team asks at your consultation."}
+                  </span>
+                </li>
+              ) : (
               <li>
                 <label className="flex min-h-11 cursor-pointer items-start gap-3">
                   <input type="checkbox" defaultChecked className="mt-1 size-4 accent-[#053F5C]" />
@@ -126,9 +165,10 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
                   </span>
                 </label>
               </li>
+              )}
               <li className="flex flex-wrap items-center gap-2 pt-2">
-                <ButtonLink href="#" variant="secondary" size="sm" iconLeft={<Download className="size-4" />}>
-                  Download my data
+                <ButtonLink href={live ? "mailto:support@beyondbmi.ie?subject=Request%20for%20a%20copy%20of%20my%20data" : "#"} variant="secondary" size="sm" iconLeft={<Download className="size-4" />}>
+                  {live ? "Request a copy of my data" : "Download my data"}
                 </ButtonLink>
                 <a className="text-[13px] text-blue-text hover:underline" href="https://beyondbmi.ie/privacy/">
                   Privacy policy

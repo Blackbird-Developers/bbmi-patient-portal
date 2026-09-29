@@ -55,6 +55,11 @@ export class MockSembleAdapter implements SembleAdapter {
     return { written: false };
   }
 
+  async syncWeights() {
+    await this.latency();
+    return { written: 0 };
+  }
+
   async createPatient(input: NewPatient) {
     await this.latency();
     const p: PatientProfile = { id: `mock-${++this.seq}`, firstName: input.firstName, lastName: input.lastName, email: input.email, dob: input.dob, phone: input.phone };

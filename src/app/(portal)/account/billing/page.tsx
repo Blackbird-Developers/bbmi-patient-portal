@@ -20,7 +20,7 @@ const INV_STATUS: Record<string, { s: Status; label: string }> = {
 export default async function BillingPage({ searchParams }: { searchParams: Promise<{ portal?: string; cancel?: string; error?: string }> }) {
   const sp = await searchParams;
   const user = await requireUser();
-  const [j, invoices] = await Promise.all([loadJourney(user), getSemble().listInvoices(user.semblePatientId)]);
+  const [j, invoices] = await Promise.all([loadJourney(user), user.semblePatientId ? getSemble().listInvoices(user.semblePatientId) : []]);
   const m = user.membership;
   const plan = m.plan;
   const overdue = j.state === "ninety_day_overdue" && m.paymentIssue;
@@ -38,7 +38,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
         {label}
       </ButtonLink>
     );
-  const planStatus: { s: Status; label: string } = overdue ? { s: "paused", label: "Paused — payment due" } : j.state === "consult_done" || j.state === "consult_paid" || j.state === "consult_booked" ? { s: "done", label: "Paid" } : j.state === "ninety_day_completed" ? { s: "done", label: "Completed" } : j.state === "legacy_lapsed" ? { s: "warn", label: "Inactive" } : { s: "done", label: "Active" };
+  const planStatus: { s: Status; label: string } = j.state === "none" ? { s: "neutral", label: "No plan" } : overdue ? { s: "paused", label: "Paused — payment due" } : j.state === "consult_done" || j.state === "consult_paid" || j.state === "consult_booked" ? { s: "done", label: "Paid" } : j.state === "ninety_day_completed" ? { s: "done", label: "Completed" } : j.state === "legacy_lapsed" ? { s: "warn", label: "Inactive" } : { s: "done", label: "Active" };
   const totalPlan = plan?.id === "ninety-day-instalments" ? "€450 in total · 3 monthly payments of €150" : plan?.id === "ninety-day-upfront" ? "€399 · one payment, nothing further to pay" : plan?.id === "consult-89" ? "€89 · one payment" : plan ? `${plan.priceLabel} · renews monthly, cancel with 30 days' notice` : "";
 
   return (
@@ -145,7 +145,11 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
           </Card>
 
           <Card>
-            <CardHeader title="Receipts & invoices" sub={`${invoices.length} · newest first · itemised for insurance claims`} />
+            {live ? (
+              <CardHeader title="Clinic invoices" sub="Invoices raised by the clinic for extra services. Receipts for your plan payments are in Invoices & receipts above (Stripe)." />
+            ) : (
+              <CardHeader title="Receipts & invoices" sub={`${invoices.length} · newest first · itemised for insurance claims`} />
+            )}
             {invoices.length ? (
               <ul className="divide-y divide-divider-soft">
                 {invoices.map((inv) => {
@@ -171,7 +175,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
                 })}
               </ul>
             ) : (
-              <p className="text-[13px] text-muted">No payments yet.</p>
+              <p className="text-[13px] text-muted">{live ? "No clinic invoices." : "No payments yet."}</p>
             )}
           </Card>
         </div>
@@ -188,7 +192,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
           </Card>
           <Card tone="soft" className="!p-4">
             <div className="text-[13.5px] font-medium">Insurance</div>
-            <p className="mt-0.5 text-[12.5px] text-ink-soft">Every receipt is itemised for private health-insurance claims. Insurance documentation for the programme is in Documents.</p>
+            <p className="mt-0.5 text-[12.5px] text-ink-soft">{live ? "Payment receipts from Stripe can be used for private health-insurance claims. Insurance documentation for the programme is in Documents." : "Every receipt is itemised for private health-insurance claims. Insurance documentation for the programme is in Documents."}</p>
             <a href="/documents?kind=insurance" className="mt-2 inline-block text-[13px] font-medium text-blue-text hover:underline">
               Insurance documents →
             </a>

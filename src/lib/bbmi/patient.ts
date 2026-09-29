@@ -1,13 +1,12 @@
 import "server-only";
 import { PLANS } from "../portal/store";
 import type { BackendFacts, Entitlement, Membership, OnboardingTask, Plan, PortalPatient, WeightEntry } from "../portal/types";
-import type { ClinicianRole } from "../semble/types";
-import { hasRole } from "../semble/types";
-import { getSemble } from "../semble";
 import { linkSemblePatient } from "../semble/link";
 import * as api from "./api";
 import { BbmiError } from "./client";
 import { ensureIntakeInSemble } from "./intake-sync";
+import { ensureWeightsInSemble } from "./weight-sync";
+import { inBackground } from "../background";
 
 /**
  * Builds the signed-in patient from the Beyond BMI backend (money, identity,
@@ -43,7 +42,12 @@ function planFor(t: api.TierStatus, info: api.PersonalInformation | null): Plan 
     const price = info?.subscription?.stripePlanId;
     if (price && price === process.env.BBMI_PRICE_ONGOING_75) return PLANS["ongoing-75"];
     if (price && price === process.env.BBMI_PRICE_ONGOING_150) return PLANS["ongoing-150"];
-    return PLANS["legacy-150"];
+    // Older plans vary (€150, €99, annual…): show the name and price Stripe holds, not a guess.
+    const sp = info?.subscription?.plan;
+    if (!sp?.currentPrice) return PLANS["legacy-150"];
+    const amount = sp.currentPrice / 100;
+    const every = sp.interval === "year" ? "year" : sp.interval === "week" ? "week" : "month";
+    return { ...PLANS["legacy-150"], name: sp.name?.trim() || PLANS["legacy-150"].name, priceLabel: `€${amount % 1 ? amount.toFixed(2) : amount} / ${every}` };
   }
   return undefined;
 }
@@ -100,6 +104,7 @@ function weightsFrom(rows: api.WeightRow[]): WeightEntry[] {
       dateUtc: w.measurementDate ? new Date(`${w.measurementDate.slice(0, 10)}T12:00:00.000Z`).toISOString() : new Date(w.created).toISOString(),
       kg: Number(w.weight),
       source: (w.doctorId ? "clinician" : "patient") as WeightEntry["source"],
+      createdUtc: new Date(w.created).toISOString(),
     }))
     .filter((w) => Number.isFinite(w.kg))
     .sort((a, b) => a.dateUtc.localeCompare(b.dateUtc));
@@ -125,15 +130,6 @@ function tasksFrom(t: api.TierStatus, f: BackendFacts): OnboardingTask[] {
   return out;
 }
 
-async function careTeam(): Promise<PortalPatient["careTeam"]> {
-  const clinicians = await getSemble().listClinicians();
-  const team: PortalPatient["careTeam"] = {};
-  for (const role of ["doctor", "nurse", "dietitian", "health-coach"] as ClinicianRole[]) {
-    const c = clinicians.find((x) => hasRole(x, role));
-    if (c) team[role] = c.id;
-  }
-  return team;
-}
 
 /** Tally forms are per environment; answers only reach the backend of the same environment. */
 export function tallyBase() {
@@ -161,7 +157,7 @@ export async function loadBbmiPatient(identity: { sub: string; email: string; gr
   const [tier, info, history, last, surveyDone, essDue, hc] = await Promise.all([
     api.getTierStatus(accessToken),
     soft(api.getPersonalInformation(accessToken), null),
-    soft(api.getWeightHistory(accessToken), { weights: [] as api.WeightRow[] }),
+    soft(api.getWeightHistory(accessToken), null),
     soft(api.getLastWeight(accessToken), { weight: null, lessWeek: false, dateAvailable: null }),
     soft(api.getSurveyDone(accessToken), false),
     soft(api.getEssDue(accessToken), false),
@@ -186,14 +182,20 @@ export async function loadBbmiPatient(identity: { sub: string; email: string; gr
     dob: clean(info?.dob)?.slice(0, 10),
     mobile: clean(info?.mobile) ?? clean(me.mobile),
     address: clean(info?.address),
+    gp: info?.gp && (info.gp.name || info.gp.email) ? { name: info.gp.name || undefined, email: info.gp.email || undefined } : undefined,
     purchaseUtc: tier.ninetyDay?.programmeStart,
     doctorReviewDue: !!tier.doctorReview?.reviewDue,
   };
 
-  const weights = weightsFrom(history.weights);
-  const semblePatientId = await linkSemblePatient({ bbmiId: me.id, email: me.email, firstName: me.firstName, lastName: me.lastName, dob: facts.dob, phone: facts.mobile, gender: me.gender ?? undefined });
-  // Once the questionnaire is in, copy it into the Semble record in the background (never blocks the page).
-  if (facts.surveyDone) void ensureIntakeInSemble({ bbmiId: me.id, semblePatientId }, accessToken);
+  const weights = weightsFrom(history?.weights ?? []);
+  // A clinical record is only created once they have bought something (a migrated record is found either way).
+  const semblePatientId = await linkSemblePatient({ bbmiId: me.id, email: me.email, firstName: me.firstName, lastName: me.lastName, dob: facts.dob, phone: facts.mobile, gender: me.gender ?? undefined, address: facts.address, create: tier.stage !== "none" });
+  // Keep the Semble record current in the background (never blocks the page): the questionnaire once it's in,
+  // and every weight the patient logs.
+  if (semblePatientId) {
+    if (facts.surveyDone) inBackground(() => ensureIntakeInSemble({ bbmiId: me.id, semblePatientId }, accessToken));
+    if (history) inBackground(() => ensureWeightsInSemble(semblePatientId, weights)); // never baseline from a failed read
+  }
   return {
     userId: me.id,
     semblePatientId,
@@ -204,7 +206,8 @@ export async function loadBbmiPatient(identity: { sub: string; email: string; gr
     goal: { startKg: weights[0]?.kg ?? 0 },
     weights,
     onboarding: tasksFrom(tier, facts),
-    careTeam: tier.stage === "consult_paid" ? {} : await careTeam(),
+    // The care team is derived from the patient's own Semble bookings (journey.ts), not assigned here.
+    careTeam: {},
     backend: facts,
   };
 }

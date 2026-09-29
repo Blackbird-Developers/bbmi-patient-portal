@@ -59,7 +59,8 @@ export async function logWeightAction(formData: FormData) {
   const kgVal = unit === "lb" ? kgRaw * 0.45359237 : kgRaw;
   if (!Number.isFinite(kgVal) || kgVal < 40 || kgVal > 400) redirect("/progress?error=weight");
   if (u.backend) {
-    // Stored by the Beyond BMI backend (always kg; it re-checks 40–400 kg). Weights have no note field there.
+    // Stored by the Beyond BMI backend (always kg; it re-checks 40–400 kg), which has no note field. The next
+    // page load copies it into the Semble record's weight log (lib/bbmi/weight-sync.ts).
     const token = await accessToken();
     if (!token) redirect("/login");
     try {
@@ -108,6 +109,7 @@ export async function bookAction(formData: FormData) {
   const programmeStepId = String(formData.get("programmeStepId") ?? "") || undefined;
   const patientNotes = String(formData.get("notes") ?? "") || undefined;
   const typeSlug = String(formData.get("typeSlug") ?? "");
+  if (!u.semblePatientId) redirect(`/book/${typeSlug}?error=unavailable`);
   if (u.backend) {
     // The Beyond BMI booking rules, enforced here because Semble won't (see lib/portal/gates.ts) — the same checks
     // the booking page shows, run against the effective stage, so a replayed request can't get past them.
@@ -142,6 +144,7 @@ export async function bookAction(formData: FormData) {
 
 export async function cancelAppointmentAction(formData: FormData) {
   const u = await requireUser();
+  if (!u.semblePatientId) redirect("/appointments?error=cancel");
   try {
     await getSemble().cancel(u.semblePatientId, String(formData.get("appointmentId")));
   } catch (e) {
@@ -156,6 +159,7 @@ export async function rescheduleAction(formData: FormData) {
   const u = await requireUser();
   const appointmentId = String(formData.get("appointmentId"));
   const typeSlug = String(formData.get("typeSlug") ?? "");
+  if (!u.semblePatientId) redirect("/appointments?error=move");
   if (u.backend) {
     const j = await loadJourney(u);
     const own = j.upcoming.find((a) => a.id === appointmentId);

@@ -29,7 +29,8 @@ export default async function ProgressPage({ searchParams }: { searchParams: Pro
 
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
         <div className="space-y-6">
-          {sp.logged ? <Callout tone="positive" title="Weight logged">Thanks — your care team sees this before your next appointment.</Callout> : null}
+          {sp.logged ? <Callout tone="positive" title="Weight logged">{!user.backend ? "Thanks — your care team sees this before your next appointment." : user.semblePatientId ? "Thanks — it’s added to your clinical record for your care team." : "Thanks — it’s saved, and your care team will see it once your care starts."}</Callout> : null}
+          {sp.error === "save" ? <Callout tone="warn" title="We couldn't save that just now">Nothing was recorded. Try again in a moment.</Callout> : null}
           {sp.error === "weight" ? <Callout tone="warn" title="That doesn't look like a weight">Weights are recorded between 40 kg and 400 kg.</Callout> : null}
 
           <Card>
@@ -48,9 +49,11 @@ export default async function ProgressPage({ searchParams }: { searchParams: Pro
             <CardHeader title="Log this week's weight" sub="Same scales, same time of day, once a week." action={<Scale className="size-5 text-blue-text" />} />
             <form action={logWeightAction} className="space-y-4">
               <WeightLogFields lastKg={w.latestKg} />
-              <Field label="Note" htmlFor="weight-note" hint="Optional — anything that explains this week.">
-                <Input id="weight-note" name="note" maxLength={120} placeholder="For example: back from holidays" />
-              </Field>
+              {!user.backend ? (
+                <Field label="Note" htmlFor="weight-note" hint="Optional — anything that explains this week.">
+                  <Input id="weight-note" name="note" maxLength={120} placeholder="For example: back from holidays" />
+                </Field>
+              ) : null}
               <div className="flex flex-wrap items-center gap-3">
                 <Button type="submit">Log weight</Button>
                 <span className="text-[12.5px] text-muted">Your doctor needs a weight from the last 45 days before a review.</span>
@@ -92,16 +95,18 @@ export default async function ProgressPage({ searchParams }: { searchParams: Pro
             <dl className="space-y-3 text-[13px]">
               <div>
                 <dt className="font-medium">Before each appointment</dt>
-                <dd className="text-ink-soft">Your doctor, nurse, dietitian and coach open the same trend you see here, so you don&apos;t have to recite your numbers.</dd>
+                <dd className="text-ink-soft">{user.backend && !user.semblePatientId ? "Once your care starts, your doctor, nurse, dietitian and coach see every weight you log here." : user.backend ? "Each weight you log is added to your clinical record, so your doctor, nurse, dietitian and coach see it without you reciting your numbers." : "Your doctor, nurse, dietitian and coach open the same trend you see here, so you don't have to recite your numbers."}</dd>
               </div>
               <div>
                 <dt className="font-medium">Before a doctor review</dt>
                 <dd className="text-ink-soft">A weight from the last 45 days is needed before a doctor review. If yours is older than that, log one here first.</dd>
               </div>
-              <div>
-                <dt className="font-medium">Your note</dt>
-                <dd className="text-ink-soft">Anything you add in the note box travels with the weight, so a holiday or a bad week is read in context.</dd>
-              </div>
+              {!user.backend ? (
+                <div>
+                  <dt className="font-medium">Your note</dt>
+                  <dd className="text-ink-soft">Anything you add in the note box travels with the weight, so a holiday or a bad week is read in context.</dd>
+                </div>
+              ) : null}
             </dl>
           </Card>
         </aside>

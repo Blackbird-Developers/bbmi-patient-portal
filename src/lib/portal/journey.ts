@@ -1,7 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { getSemble } from "../semble";
-import type { Appointment, Clinician, Prescription } from "../semble/types";
+import type { Appointment, Clinician, ClinicianRole, Prescription } from "../semble/types";
 import { NINETY_DAY_STEPS, buildProgrammeView, programmeProgress } from "./programme";
 import type { MemberState, PortalPatient, ProgrammeStepView } from "./types";
 
@@ -44,6 +44,8 @@ export interface JourneyView {
   prescriptions: Prescription[];
   activePrescription?: Prescription;
   careTeam: Clinician[];
+  /** role → clinician the patient has actually seen (or is booked with) — for "your usual clinician" */
+  careTeamByRole: Partial<Record<ClinicianRole, string>>;
   can: {
     book: boolean;
     join: boolean;
@@ -76,7 +78,7 @@ function headline(p: PortalPatient, v: { state: MemberState; nextAppointment?: A
         ? { title: `You're ready to book, ${first}`, body: "Pick a time with one of our doctors. Your consultation is 25 minutes by video.", ctaLabel: "Book your consultation", ctaHref: "/book/specialist-consultation", tone: "navy" }
         : { title: "Your consultation is paid — one step first", body: "Complete your health questionnaire (about 8 minutes) so your doctor can prepare. Booking opens as soon as it's in.", ctaLabel: "Start questionnaire", ctaHref: "/forms/intake", tone: "navy" };
     case "consult_booked":
-      return { title: "Your consultation is booked", body: v.nextAppointment ? "We'll send a reminder the day before and an hour before. Join from here when it's time." : "", ctaLabel: "See appointment", ctaHref: "/appointments", tone: "default" };
+      return { title: "Your consultation is booked", body: p.backend ? "Join from here when it's time — the video link opens on your appointment." : "We'll send a reminder the day before and an hour before. Join from here when it's time.", ctaLabel: "See appointment", ctaHref: "/appointments", tone: "default" };
     case "consult_done":
       return p.backend && !p.backend.canUpgrade
         ? { title: `Good to see you, ${first}`, body: "Your consultation is complete. Your care team will be in touch about your treatment plan and what comes next.", tone: "default" }
@@ -84,7 +86,9 @@ function headline(p: PortalPatient, v: { state: MemberState; nextAppointment?: A
     case "ninety_day_active":
       return { title: `Day ${v.programmeDay} of 90`, body: v.weight.changeKg < 0 ? `${Math.abs(v.weight.changeKg).toFixed(1)} kg down since you started. Keep the weekly weigh-in going — it's the habit that matters most.` : "Your programme is under way. Weekly weigh-ins and your monthly appointments are what matter most.", tone: "default" };
     case "ninety_day_overdue":
-      return { title: "Your 90-Day Programme is paused", body: p.membership.paymentIssue?.message ?? "A payment was unsuccessful.", ctaLabel: "Pay instalment and resume", ctaHref: "/account/billing", tone: "warn" };
+      return p.backend && !p.backend.billingIssue?.payUrl
+        ? { title: "Your 90-Day Programme is paused", body: p.membership.paymentIssue?.message ?? "A payment was unsuccessful.", ctaLabel: "Contact the care team", ctaHref: "/care", tone: "warn" }
+        : { title: "Your 90-Day Programme is paused", body: p.membership.paymentIssue?.message ?? "A payment was unsuccessful.", ctaLabel: "Pay instalment and resume", ctaHref: "/account/billing", tone: "warn" };
     case "ninety_day_completed":
       return { title: "You've completed your 90-Day Programme", body: `${Math.abs(v.weight.changeKg).toFixed(1)} kg since day one. Choose how you'd like to continue — or take a break. Your history and results are kept either way.`, ctaLabel: "See your options", ctaHref: "/plans", tone: "positive" };
     case "legacy_member":
@@ -103,14 +107,16 @@ async function buildJourney(user: PortalPatient, nowUtc = new Date().toISOString
   const semble = getSemble();
   const now = new Date(nowUtc);
   const [appointments, prescriptions, clinicians] = await Promise.all([
-    semble.listAppointments(user.semblePatientId, { fromUtc: new Date(now.getTime() - 400 * 86_400_000).toISOString(), toUtc: new Date(now.getTime() + 200 * 86_400_000).toISOString() }),
-    semble.listPrescriptions(user.semblePatientId),
+    // No Semble record yet (signed up, never bought): nothing clinical to show.
+    user.semblePatientId ? semble.listAppointments(user.semblePatientId, { fromUtc: new Date(now.getTime() - 400 * 86_400_000).toISOString(), toUtc: new Date(now.getTime() + 200 * 86_400_000).toISOString() }) : [],
+    user.semblePatientId ? semble.listPrescriptions(user.semblePatientId) : [],
     semble.listClinicians(),
   ]);
 
   const live = appointments.filter((a) => a.status !== "cancelled");
-  const upcoming = live.filter((a) => a.status === "confirmed" && new Date(a.endUtc).getTime() >= now.getTime()).sort((a, b) => a.startUtc.localeCompare(b.startUtc));
-  const past = live.filter((a) => !(a.status === "confirmed" && new Date(a.endUtc).getTime() >= now.getTime())).sort((a, b) => b.startUtc.localeCompare(a.startUtc));
+  const isUpcoming = (a: Appointment) => (a.status === "confirmed" || a.status === "pending") && new Date(a.endUtc).getTime() >= now.getTime();
+  const upcoming = live.filter(isUpcoming).sort((a, b) => a.startUtc.localeCompare(b.startUtc));
+  const past = live.filter((a) => !isUpcoming(a)).sort((a, b) => b.startUtc.localeCompare(a.startUtc));
   const nextAppointment = upcoming[0];
 
   const m = user.membership;
@@ -120,7 +126,7 @@ async function buildJourney(user: PortalPatient, nowUtc = new Date().toISOString
   if (user.backend && (state === "consult_paid" || state === "consult_booked")) {
     const consults = live.filter((a) => a.type.slug === "specialist-consultation");
     if (consults.some((a) => a.status === "completed")) state = "consult_done";
-    else if (consults.some((a) => a.status === "confirmed" || a.status === "pending")) state = "consult_booked";
+    else if (consults.some(isUpcoming)) state = "consult_booked";
   }
   const isNinetyDay = state === "ninety_day_active" || state === "ninety_day_overdue";
   let programme: JourneyView["programme"];
@@ -135,7 +141,14 @@ async function buildJourney(user: PortalPatient, nowUtc = new Date().toISOString
 
   const questionnaireDone = !user.onboarding.some((t) => t.id === "questionnaire" && !t.done);
   const weight = weightSummary(user, now);
-  const careTeam = clinicians.filter((c) => Object.values(user.careTeam).includes(c.id));
+  // Beyond BMI mode: the care team is who the patient has actually seen or is booked with (latest per role),
+  // never "the first clinician in the practice". Demo mode keeps its assigned team.
+  const careTeamByRole: Partial<Record<ClinicianRole, string>> = {};
+  if (user.backend) {
+    const listed = new Set(clinicians.map((c) => c.id));
+    for (const a of [...live].filter((a) => a.status !== "no-show" && listed.has(a.clinician.id)).sort((x, y) => x.startUtc.localeCompare(y.startUtc))) careTeamByRole[a.type.role] = a.clinician.id;
+  } else Object.assign(careTeamByRole, user.careTeam);
+  const careTeam = clinicians.filter((c) => Object.values(careTeamByRole).includes(c.id));
   const bookable = new Set<MemberState>(["consult_paid", "ninety_day_active", "legacy_member", "consult_done"]);
 
   let bookingLockedReason: string | undefined;
@@ -162,6 +175,7 @@ async function buildJourney(user: PortalPatient, nowUtc = new Date().toISOString
     prescriptions,
     activePrescription: prescriptions[0],
     careTeam,
+    careTeamByRole,
     can: {
       book: bookable.has(state) && !(state === "consult_paid" && !questionnaireDone) && state !== "consult_done",
       join: state !== "ninety_day_overdue" && state !== "legacy_lapsed" && !joinBlockedBySurvey,

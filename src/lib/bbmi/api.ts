@@ -65,6 +65,12 @@ export const getWeightHistory = (t: string) => bbmi<{ weights: WeightRow[]; perc
 export const getLastWeight = (t: string) => bbmi<{ weight: WeightRow | null; lessWeek: boolean; dateAvailable: string | null }>(t, "/user/measurements/weights/last");
 export const addWeight = (t: string, kg: number, measurementDate?: string) => bbmi<WeightRow>(t, "/user/measurements/weights", { method: "POST", body: { weight: kg, unitPreference: "kg", ...(measurementDate ? { measurementDate } : {}) } });
 export const getSurveyDone = (t: string) => bbmi<boolean>(t, "/user/survey-info");
+/** The patient's own intake answers, grouped by section (chosen texts, not option ids). */
+export interface HealthRecordSection {
+  sectionName: string;
+  questions: { id: string; formId: string; text: string; type?: string; answer: { value: string | null }[] }[];
+}
+export const getHealthRecords = (t: string) => bbmi<HealthRecordSection[]>(t, "/user/health-records");
 export const getSurveyGate = (t: string) => bbmi<{ submitted: boolean; required: boolean }>(t, "/user/survey-gate");
 export const getEssDue = (t: string) => bbmi<boolean>(t, "/user/survey/ess-eq5d");
 export const getHealthCoachSurvey = (t: string) => bbmi<{ show: boolean; survey: string }>(t, "/user/survey/health-coach-survey");

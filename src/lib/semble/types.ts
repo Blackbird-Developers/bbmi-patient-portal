@@ -61,6 +61,19 @@ export interface PatientProfile {
   numbers?: Record<string, string>;
 }
 
+/**
+ * A completed health questionnaire to copy into the Semble record. Semble's API cannot write
+ * Vitals, Problems or Medical history directly, so the answers become one questionnaire
+ * consultation of question/answer records, plus structured allergy records.
+ */
+export interface IntakeSubmission {
+  /** stable hash of the answers — Semble keeps it so the same submission is never written twice */
+  fingerprint: string;
+  title: string;
+  sections: { title: string; items: { question: string; answer: string }[] }[];
+  allergies: string[];
+}
+
 export interface NewPatient {
   firstName: string;
   lastName: string;

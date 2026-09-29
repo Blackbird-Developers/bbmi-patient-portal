@@ -11,6 +11,7 @@ import {
   type Clinician,
   type ClinicianRole,
   type DocumentContent,
+  type IntakeSubmission,
   type Invoice,
   type NewPatient,
   type PatientDocument,
@@ -380,6 +381,47 @@ export class GraphqlSembleAdapter implements SembleAdapter {
     const id = d.createPatient.data.id;
     for (const [name, value] of Object.entries(input.numbers ?? {})) await this.setPatientNumber(id, name, value);
     return this.getPatient(id);
+  }
+
+  async recordIntake(patientId: string, intake: IntakeSubmission): Promise<{ written: boolean }> {
+    const MARKER = "Beyond BMI questionnaire";
+    const cur = await this.gql<{ patient: null | { customAttributes?: { id?: string | null; title?: string | null; response?: string | null }[] | null } }>(
+      `query IntakeMarker($id: ID!) { patient(id: $id) { customAttributes { id title response } } }`,
+      { id: patientId },
+    );
+    if (!cur.patient) throw new SembleAdapterError("Patient not found", "not-found");
+    const marker = cur.patient.customAttributes?.find((a) => a.title === MARKER);
+    if (marker?.response === intake.fingerprint) return { written: false };
+
+    // The first record opens the questionnaire consultation; everything else is filed in it.
+    const first = await this.gql<{ createFreeTextRecord: { data: { consultationId?: string | null } | null; error?: string | null } }>(
+      `mutation IntakeOpen($d: CreateFreeTextRecordDataInput!) { createFreeTextRecord(recordData: $d) { data { consultationId } error } }`,
+      { d: { patientId, sectionTitle: intake.title, question: "Source", answer: "Completed by the patient in the Beyond BMI patient portal" } },
+    );
+    const consultationId = first.createFreeTextRecord.data?.consultationId;
+    if (!consultationId) throw new SembleAdapterError(first.createFreeTextRecord.error || "Could not start the questionnaire record", "upstream");
+    for (const section of intake.sections) {
+      for (const item of section.items) {
+        const r = await this.gql<{ createFreeTextRecord: { data: { id: string } | null; error?: string | null } }>(
+          `mutation IntakeItem($d: CreateFreeTextRecordDataInput!) { createFreeTextRecord(recordData: $d) { data { id } error } }`,
+          { d: { patientId, consultationId, sectionTitle: section.title, question: item.question.slice(0, 500), answer: item.answer.slice(0, 4000) } },
+        );
+        if (!r.createFreeTextRecord.data) throw new SembleAdapterError(r.createFreeTextRecord.error || "Could not save a questionnaire answer", "upstream");
+      }
+    }
+    for (const allergen of intake.allergies) {
+      await this.gql(
+        `mutation IntakeAllergy($d: CreateAllergyRecordDataInput!) { createAllergyRecord(recordData: $d) { data { id } error } }`,
+        { d: { patientId, consultationId, sectionTitle: intake.title, allergen: allergen.slice(0, 200), allergyIntoleranceType: "allergy", comments: "Reported by the patient in the health questionnaire" } },
+      );
+    }
+    // Marked last, so an interrupted copy is retried on the next load.
+    if (marker?.id) {
+      await this.gql(`mutation IntakeMark($p: ID!, $a: ID!, $d: UpdateCustomAttributeData!) { updatePatientAttribute(patientId: $p, attributeId: $a, attributeData: $d) { data { id } error } }`, { p: patientId, a: marker.id, d: { response: intake.fingerprint } });
+    } else {
+      await this.gql(`mutation IntakeMarkNew($p: ID!, $d: AddCustomAttributeData!) { addPatientAttribute(patientId: $p, attributeData: $d) { data { id } error } }`, { p: patientId, d: { title: MARKER, text: "Last questionnaire copied from the patient portal", response: intake.fingerprint } });
+    }
+    return { written: true };
   }
 
   async updatePatientContact(patientId: string, patch: Partial<Pick<PatientProfile, "phone" | "address" | "communicationPreferences">>): Promise<PatientProfile> {

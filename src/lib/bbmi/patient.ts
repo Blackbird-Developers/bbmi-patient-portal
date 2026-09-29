@@ -7,6 +7,7 @@ import { getSemble } from "../semble";
 import { linkSemblePatient } from "../semble/link";
 import * as api from "./api";
 import { BbmiError } from "./client";
+import { ensureIntakeInSemble } from "./intake-sync";
 
 /**
  * Builds the signed-in patient from the Beyond BMI backend (money, identity,
@@ -191,6 +192,8 @@ export async function loadBbmiPatient(identity: { sub: string; email: string; gr
 
   const weights = weightsFrom(history.weights);
   const semblePatientId = await linkSemblePatient({ bbmiId: me.id, email: me.email, firstName: me.firstName, lastName: me.lastName, dob: facts.dob, phone: facts.mobile, gender: me.gender ?? undefined });
+  // Once the questionnaire is in, copy it into the Semble record in the background (never blocks the page).
+  if (facts.surveyDone) void ensureIntakeInSemble({ bbmiId: me.id, semblePatientId }, accessToken);
   return {
     userId: me.id,
     semblePatientId,

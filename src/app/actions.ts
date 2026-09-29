@@ -8,6 +8,7 @@ import * as bbmiApi from "@/lib/bbmi/api";
 import { BbmiError } from "@/lib/bbmi/client";
 import { loadJourney } from "@/lib/portal/journey";
 import { bookingGate } from "@/lib/portal/gates";
+import { ensureIntakeInSemble } from "@/lib/bbmi/intake-sync";
 import { addWeight, completeTask, continueToOngoing, markConsultBooked, markQuestionnaireDone, setPaymentResolved, upgradeToNinetyDay } from "@/lib/portal/store";
 
 /* ---------------------------------------------------------------- auth */
@@ -115,6 +116,9 @@ export async function bookAction(formData: FormData) {
     const back = `/book/${typeSlug}${programmeStepId ? `?step=${programmeStepId}` : ""}`;
     if (!type || type.slug !== typeSlug || !j.can.book) redirect(back);
     if (!bookingGate(u, { state: j.state, upcoming: j.upcoming, programme: j.programme }, type, { programmeStepId, startUtc }).ok) redirect(back);
+    // The doctor should see the questionnaire in Semble before the appointment: make sure it has been copied.
+    const token = await accessToken();
+    if (token) await ensureIntakeInSemble({ bbmiId: u.userId, semblePatientId: u.semblePatientId }, token, { force: true });
   }
   let bookedId: string;
   try {

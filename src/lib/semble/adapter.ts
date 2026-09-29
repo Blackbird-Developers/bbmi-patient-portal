@@ -6,6 +6,7 @@ import type {
   BookingRequest,
   Clinician,
   DocumentContent,
+  IntakeSubmission,
   NewPatient,
   Invoice,
   PatientDocument,
@@ -43,6 +44,8 @@ export interface SembleAdapter {
   setPatientNumber(patientId: string, numberName: string, value: string): Promise<void>;
   /** Creates the Semble patient for someone who has none yet (first sign-in to the portal). */
   createPatient(input: NewPatient): Promise<PatientProfile>;
+  /** Copies a completed questionnaire into the clinical record once (by fingerprint). */
+  recordIntake(patientId: string, intake: IntakeSubmission): Promise<{ written: boolean }>;
   updatePatientContact(
     patientId: string,
     patch: Partial<Pick<PatientProfile, "phone" | "address" | "communicationPreferences">>,

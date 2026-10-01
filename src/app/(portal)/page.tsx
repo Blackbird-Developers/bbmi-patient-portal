@@ -16,6 +16,7 @@ import { clinicianDisplay, euro, fmtDate, nowMs, relativeDay, ROLE_LABEL } from 
 import { payInstalmentAction } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Package, CreditCard, Users } from "lucide-react";
+import { getSemble } from "@/lib/semble";
 
 export default async function HomePage({ searchParams }: { searchParams: Promise<{ welcome?: string; resumed?: string }> }) {
   const sp = await searchParams;
@@ -23,6 +24,8 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const j = await loadJourney(user);
   const m = user.membership;
   const rx = j.activePrescription;
+  // Beyond BMI mode: patients send prescriptions to their pharmacy themselves (Prescriptions page).
+  const rxSent = user.backend && user.semblePatientId && rx?.status === "issued" ? ((await getSemble().getPrescriptionSends(user.semblePatientId).catch(() => null)) ?? null)?.[rx.id] : undefined;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
@@ -120,6 +123,10 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
                 <span>{rx.fulfilment.dispatchedAtUtc ? `Dispatched by ${rx.fulfilment.pharmacyName} ${relativeDay(rx.fulfilment.dispatchedAtUtc)}` : `${rx.fulfilment.pharmacyName} will dispatch within 2 working days`}</span>
               ) : rx.status === "sent" ? (
                 <span>Sent to {rx.fulfilment?.pharmacyName ?? "your pharmacy"}</span>
+              ) : rxSent?.status === "sent" ? (
+                <span>Sent to {rxSent.pharmacyName}</span>
+              ) : user.backend && rx.status === "issued" ? (
+                <span>Ready to send — choose your pharmacy and send it from Prescriptions</span>
               ) : (
                 <span>With your doctor — we&apos;ll tell you when it goes to the pharmacy</span>
               )}

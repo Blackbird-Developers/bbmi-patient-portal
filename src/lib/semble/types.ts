@@ -31,6 +31,32 @@ export interface Clinician {
 /** Can this clinician be booked for appointments of this role? */
 export const hasRole = (c: Clinician, role: ClinicianRole) => (c.roles ?? [c.role]).includes(role);
 
+/** A pharmacy the patient can choose (a Semble Contact tagged portalKind=pharmacy). */
+export interface Pharmacy {
+  /** Semble Contact.id */
+  id: string;
+  name: string;
+  /** where prescriptions are emailed (a Healthmail address for pharmacies in the Republic) */
+  email: string;
+  address?: string;
+  city?: string;
+  county?: string;
+  postcode?: string;
+}
+
+/** Bookkeeping for one prescription the portal emailed to a pharmacy (kept on the Semble patient). */
+export interface PrescriptionSend {
+  /** "pending" = being sent now (or interrupted); "sent" = delivered to the mail provider */
+  status: "pending" | "sent";
+  atUtc: string;
+  pharmacyId: string;
+  pharmacyName: string;
+  /** "outbox" = a local test file, not a real email */
+  via?: "smtp" | "outbox";
+  /** identifies the claim, so two attempts never both proceed */
+  nonce: string;
+}
+
 export interface PatientProfile {
   /** Semble Patient.id (24-hex ObjectId) — never shown to the patient */
   id: string;
@@ -172,6 +198,8 @@ export interface Prescription {
   prescriber: Clinician;
   drugs: PrescriptionDrug[];
   status: PrescriptionStatus;
+  /** Semble's own status word (e.g. "active") — the portal only sends prescriptions in an allow-listed status */
+  sembleStatus?: string;
   /** Semble gives a 15-minute signed URL; the portal fetches it on demand, never stores it */
   pdfAvailable: boolean;
   /** pharmacy / delivery this script went to (portal-owned record) */

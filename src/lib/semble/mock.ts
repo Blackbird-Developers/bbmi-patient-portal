@@ -190,6 +190,26 @@ export class MockSembleAdapter implements SembleAdapter {
     return (PRESCRIPTIONS[patientId] ?? []).slice().sort((a, b) => b.issuedAtUtc.localeCompare(a.issuedAtUtc));
   }
 
+  async searchPharmacies() {
+    return [];
+  }
+  async getPharmacy() {
+    return null;
+  }
+  async getPatientPharmacy() {
+    return null;
+  }
+  async setPatientPharmacy() {}
+  async getPrescriptionSends() {
+    return {};
+  }
+  async claimPrescriptionSend() {
+    return null;
+  }
+  async updatePrescriptionSend() {}
+  async releasePrescriptionSend() {}
+  async recordPrescriptionSent() {}
+
   async getPrescriptionPdfUrl(patientId: string, prescriptionId: string) {
     await this.latency();
     const rx = (PRESCRIPTIONS[patientId] ?? []).find((r) => r.id === prescriptionId);

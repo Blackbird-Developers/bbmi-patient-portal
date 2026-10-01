@@ -7,6 +7,8 @@ import type {
   Clinician,
   DocumentContent,
   IntakeSubmission,
+  Pharmacy,
+  PrescriptionSend,
   WeightLogEntry,
   NewPatient,
   Invoice,
@@ -78,6 +80,26 @@ export interface SembleAdapter {
   listPrescriptions(patientId: string): Promise<Prescription[]>;
   /** Mints a short-lived download URL (Semble: 15 min). Never cached. */
   getPrescriptionPdfUrl(patientId: string, prescriptionId: string): Promise<string | null>;
+
+  // --- pharmacies (prescriptions the patient sends to a pharmacy of their choice) ---
+  /** Pharmacies (Semble Contacts tagged portalKind=pharmacy) matching a name/town search. */
+  searchPharmacies(query: string): Promise<Pharmacy[]>;
+  /** One pharmacy by id — null unless it is a tagged pharmacy with an email. */
+  getPharmacy(id: string): Promise<Pharmacy | null>;
+  /** The patient's chosen pharmacy (Semble patient relationship of type PHARMACY). */
+  getPatientPharmacy(patientId: string): Promise<Pharmacy | null>;
+  setPatientPharmacy(patientId: string, pharmacy: Pharmacy): Promise<void>;
+  /**
+   * Portal bookkeeping of prescriptions emailed to a pharmacy, by prescription id. Fails closed: a record that
+   * can't be read, or two competing claims, come back as an in-progress/uncertain claim, never as "not sent".
+   */
+  getPrescriptionSends(patientId: string): Promise<Record<string, PrescriptionSend>>;
+  /** Claims one prescription for sending. Returns the claim id only if this is the ONLY claim on it (else backs off). */
+  claimPrescriptionSend(patientId: string, prescriptionId: string, send: PrescriptionSend): Promise<string | null>;
+  updatePrescriptionSend(patientId: string, claimId: string, send: PrescriptionSend): Promise<void>;
+  releasePrescriptionSend(patientId: string, claimId: string): Promise<void>;
+  /** A clinician-visible note in the record that the prescription went to a pharmacy. */
+  recordPrescriptionSent(patientId: string, text: { title: string; detail: string }): Promise<void>;
   listDocuments(patientId: string): Promise<PatientDocument[]>;
   /** Only documents shared with this patient open; external URLs are streamed by the portal, never handed to the browser. */
   openDocument(patientId: string, documentId: string): Promise<DocumentContent | null>;

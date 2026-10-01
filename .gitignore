@@ -42,3 +42,6 @@ yarn-error.log*
 # misc
 .DS_Store
 *.pem
+
+# local test emails (lib/mail.ts outbox) — contain prescriptions
+.outbox/

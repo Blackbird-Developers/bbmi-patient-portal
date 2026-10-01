@@ -12,6 +12,8 @@ import {
   type ClinicianRole,
   type DocumentContent,
   type IntakeSubmission,
+  type Pharmacy,
+  type PrescriptionSend,
   type WeightLogEntry,
   type Invoice,
   type NewPatient,
@@ -893,6 +895,7 @@ export class GraphqlSembleAdapter implements SembleAdapter {
           prescriber: ref.clinicians.find((c) => c.id === r.doctor?.id) ?? { id: r.doctor?.id ?? "", firstName: "", lastName: "", fullName: "Your doctor", role: "doctor" },
           drugs: (r.drugs ?? []).map((x) => ({ name: x.drug ?? "Medication", dosage: x.dosage ?? undefined, quantity: x.quantity ?? undefined, comments: x.comments ?? undefined })),
           status: /cancel|void/i.test(r.status ?? "") ? "cancelled" : order ? "sent" : "issued",
+          sembleStatus: r.status ?? undefined,
           fulfilment: order ? { method: "pharmacy", pharmacyName: order.provider ?? undefined } : undefined,
           // The list never mints the 15-minute PDF URL; getPrescriptionPdfUrl does, on click.
           pdfAvailable: true,
@@ -910,6 +913,167 @@ export class GraphqlSembleAdapter implements SembleAdapter {
     );
     if (!d.prescription || d.prescription.patient?.id !== patientId) return null;
     return d.prescription.pdfDownloadUrl ?? null; // 15-minute URL — streamed by the portal, never logged or sent to the browser
+  }
+
+  /* ------------------------------------------------------------------ pharmacies */
+  // Pharmacies are Semble Contacts tagged portalKind=pharmacy (scripts/import-pharmacies.mjs loads them).
+  // The patient's choice is a patient relationship of type PHARMACY, so staff see it in Semble too.
+
+  private static readonly PHARMACY_FIELDS = "id company fullName email address { address city postcode } metadata { key value }";
+
+  private static pharmacyFrom(c: { id: string; company?: string | null; fullName?: string | null; email?: string | null; address?: { address?: string | null; city?: string | null; postcode?: string | null } | null; metadata?: { key: string; value?: string | null }[] | null } | null): Pharmacy | null {
+    if (!c || !c.metadata?.some((m) => m.key === "portalKind" && m.value === "pharmacy")) return null;
+    const email = c.email?.trim();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
+    return {
+      id: c.id,
+      name: (c.company || c.fullName || "Pharmacy").trim(),
+      email,
+      address: c.address?.address || undefined,
+      city: c.address?.city || undefined,
+      postcode: c.address?.postcode || undefined,
+      county: c.metadata.find((m) => m.key === "county")?.value || undefined,
+    };
+  }
+
+  async searchPharmacies(query: string): Promise<Pharmacy[]> {
+    const q = query.trim().slice(0, 60);
+    if (q.length < 2) return [];
+    const d = await this.gql<{ contacts: { data: Parameters<typeof GraphqlSembleAdapter.pharmacyFrom>[0][] } }>(
+      `query Pharmacies($q: String) { contacts(search: $q, filters: { metadata: { key: "portalKind", value: "pharmacy" } }, pagination: { page: 1, pageSize: 25 }) { data { ${GraphqlSembleAdapter.PHARMACY_FIELDS} } } }`,
+      { q },
+    );
+    const out = new Map<string, Pharmacy>();
+    for (const c of d.contacts.data) {
+      const p = GraphqlSembleAdapter.pharmacyFrom(c);
+      if (p) out.set(p.id, p);
+    }
+    return [...out.values()];
+  }
+
+  async getPharmacy(id: string): Promise<Pharmacy | null> {
+    if (!/^[a-f0-9]{24}$/i.test(id)) return null;
+    const d = await this.gql<{ contact: Parameters<typeof GraphqlSembleAdapter.pharmacyFrom>[0] }>(
+      `query Pharmacy($id: ID!) { contact(id: $id) { ${GraphqlSembleAdapter.PHARMACY_FIELDS} } }`,
+      { id },
+    );
+    return GraphqlSembleAdapter.pharmacyFrom(d.contact);
+  }
+
+  private async pharmacyRelationships(patientId: string) {
+    const d = await this.gql<{ patientRelationships: null | { data: { relationshipId?: string | null; relationshipType?: string | null; deleted?: boolean | null; contactDetails?: { source?: string | null; sourceId?: string | null; companyName?: string | null; name?: string | null; email?: string | null; address?: string | null; city?: string | null; postcode?: string | null } | null }[] | null } }>(
+      `query PatientPharmacy($id: ID!) { patientRelationships(patientId: $id, relationshipType: PHARMACY) { data { relationshipId relationshipType deleted contactDetails { source sourceId companyName name email address city postcode } } } }`,
+      { id: patientId },
+    );
+    return (d.patientRelationships?.data ?? []).filter((r) => !r.deleted && r.relationshipType === "PHARMACY" && r.relationshipId);
+  }
+
+  /** Pharmacy relationships the portal made: linked to a directory contact (staff-typed entries have no source id). */
+  private static portalMade(r: { contactDetails?: { source?: string | null; sourceId?: string | null } | null }) {
+    return r.contactDetails?.source === "contact" && /^[a-f0-9]{24}$/i.test(r.contactDetails?.sourceId ?? "");
+  }
+
+  async getPatientPharmacy(patientId: string): Promise<Pharmacy | null> {
+    // The newest portal choice wins (relationship ids are Mongo ObjectIds, so they sort by creation).
+    const r = (await this.pharmacyRelationships(patientId)).filter(GraphqlSembleAdapter.portalMade).sort((x, y) => String(y.relationshipId).localeCompare(String(x.relationshipId)))[0];
+    const c = r?.contactDetails;
+    if (!c?.email || !c.sourceId) return null;
+    return { id: c.sourceId, name: c.companyName || c.name || "Your pharmacy", email: c.email, address: c.address || undefined, city: c.city || undefined, postcode: c.postcode || undefined };
+  }
+
+  async setPatientPharmacy(patientId: string, p: Pharmacy): Promise<void> {
+    const mine = (await this.pharmacyRelationships(patientId)).filter(GraphqlSembleAdapter.portalMade);
+    // Already the patient's pharmacy, with these details: nothing to do.
+    if (mine.length === 1 && mine[0].contactDetails?.sourceId === p.id && mine[0].contactDetails?.email === p.email) return;
+    // Semble rejects `name` alongside companyName, so the pharmacy is a company contact.
+    const contact = Object.fromEntries(Object.entries({ source: "contact", sourceId: p.id, companyName: p.name, email: p.email, address: p.address, city: p.city, postcode: p.postcode, country: "IE" }).filter(([, v]) => v));
+    // A change is add-then-remove: Semble's updatePatientRelationship rejects company contacts, and adding first
+    // means a failure never leaves the patient with no pharmacy. Only the portal's own entries are replaced —
+    // a pharmacy staff typed into Semble stays.
+    const added = await this.gql<{ addPatientRelationship: { data: { id: string } | null; error?: string | null } }>(
+      `mutation AddPharmacy($p: ID!, $c: PatientRelationshipContactInput!) { addPatientRelationship(patientId: $p, relationshipType: PHARMACY, relationshipLabel: "Chosen pharmacy (patient portal)", contact: $c) { data { id } error } }`,
+      { p: patientId, c: contact },
+    );
+    if (!added.addPatientRelationship.data) throw new SembleAdapterError(added.addPatientRelationship.error || "Could not save your pharmacy", "upstream");
+    for (const old of mine) {
+      await this.gql(`mutation RemovePharmacy($p: ID!, $r: ID!) { removePatientRelationship(patientId: $p, relationshipId: $r) { data { id } error } }`, { p: patientId, r: old.relationshipId }).catch((e) =>
+        console.error(`Semble: could not remove the previous pharmacy of patient ${patientId}`, e instanceof Error ? e.message : e),
+      );
+    }
+  }
+
+  // One patient custom attribute per prescription ("Beyond BMI prescription send <id>"), so a write for one
+  // prescription never rewrites another's, and two competing claims are visible as two attributes.
+  private static readonly SEND_PREFIX = "Beyond BMI prescription send ";
+
+  private async sendAttributes(patientId: string) {
+    const d = await this.gql<{ patient: null | { customAttributes?: { id?: string | null; title?: string | null; response?: string | null }[] | null } }>(
+      `query PrescriptionSends($id: ID!) { patient(id: $id) { customAttributes { id title response } } }`,
+      { id: patientId },
+    );
+    if (!d.patient) throw new SembleAdapterError("Patient not found", "not-found");
+    return (d.patient.customAttributes ?? []).filter((a) => a.id && a.title?.startsWith(GraphqlSembleAdapter.SEND_PREFIX)) as { id: string; title: string; response?: string | null }[];
+  }
+
+  private static parseSend(response?: string | null): PrescriptionSend | null {
+    try {
+      const v = JSON.parse(response || "");
+      return v && typeof v === "object" && (v.status === "pending" || v.status === "sent") && typeof v.atUtc === "string" ? (v as PrescriptionSend) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async getPrescriptionSends(patientId: string): Promise<Record<string, PrescriptionSend>> {
+    const byRx = new Map<string, (PrescriptionSend | null)[]>();
+    for (const a of await this.sendAttributes(patientId)) {
+      const rx = a.title.slice(GraphqlSembleAdapter.SEND_PREFIX.length).trim();
+      byRx.set(rx, [...(byRx.get(rx) ?? []), GraphqlSembleAdapter.parseSend(a.response)]);
+    }
+    const out: Record<string, PrescriptionSend> = {};
+    for (const [rx, all] of byRx) {
+      const sent = all.find((x) => x?.status === "sent");
+      if (sent) out[rx] = sent;
+      // Unreadable (e.g. edited by hand) or competing claims: never "not sent" — treat as interrupted.
+      else if (all.length !== 1 || !all[0]) out[rx] = { status: "pending", atUtc: new Date(0).toISOString(), pharmacyId: "", pharmacyName: "the pharmacy", nonce: "" };
+      else out[rx] = all[0];
+    }
+    return out;
+  }
+
+  async claimPrescriptionSend(patientId: string, prescriptionId: string, send: PrescriptionSend): Promise<string | null> {
+    const title = `${GraphqlSembleAdapter.SEND_PREFIX}${prescriptionId}`;
+    const r = await this.gql<{ addPatientAttribute: { data: { id: string } | null; error?: string | null } }>(
+      `mutation ClaimSend($p: ID!, $d: AddCustomAttributeData!) { addPatientAttribute(patientId: $p, attributeData: $d) { data { id } error } }`,
+      { p: patientId, d: { title, text: "Prescription the patient sent to a pharmacy from the portal (bookkeeping — leave as is)", response: JSON.stringify(send) } },
+    );
+    if (!r.addPatientAttribute.data) throw new SembleAdapterError(r.addPatientAttribute.error || "Could not claim the prescription", "upstream");
+    const claims = (await this.sendAttributes(patientId)).filter((a) => a.title === title);
+    const mine = claims.find((a) => GraphqlSembleAdapter.parseSend(a.response)?.nonce === send.nonce);
+    // Go ahead only if ours is the ONLY claim: with two, both back off (nothing is sent, the patient can retry).
+    if (mine && claims.length === 1) return mine.id;
+    if (mine) await this.releasePrescriptionSend(patientId, mine.id).catch(() => undefined);
+    return null;
+  }
+
+  async updatePrescriptionSend(patientId: string, claimId: string, send: PrescriptionSend): Promise<void> {
+    const r = await this.gql<{ updatePatientAttribute: { data: { id: string } | null; error?: string | null } }>(
+      `mutation UpdateSend($p: ID!, $a: ID!, $d: UpdateCustomAttributeData!) { updatePatientAttribute(patientId: $p, attributeId: $a, attributeData: $d) { data { id } error } }`,
+      { p: patientId, a: claimId, d: { response: JSON.stringify(send) } },
+    );
+    if (!r.updatePatientAttribute.data) throw new SembleAdapterError(r.updatePatientAttribute.error || "Could not record the send", "upstream");
+  }
+
+  async releasePrescriptionSend(patientId: string, claimId: string): Promise<void> {
+    const r = await this.gql<{ removePatientAttribute: { data: { id: string } | null; error?: string | null } }>(
+      `mutation ReleaseSend($p: ID!, $a: ID!) { removePatientAttribute(patientId: $p, attributeId: $a) { data { id } error } }`,
+      { p: patientId, a: claimId },
+    );
+    if (!r.removePatientAttribute.data) throw new SembleAdapterError(r.removePatientAttribute.error || "Could not release the claim", "upstream");
+  }
+
+  async recordPrescriptionSent(patientId: string, text: { title: string; detail: string }): Promise<void> {
+    await this.freeText(patientId, undefined, "Prescription sent to pharmacy (Beyond BMI)", text.title, text.detail);
   }
 
   /** Everything staff shared with the patient (all pages). */
